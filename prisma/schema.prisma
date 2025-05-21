@@ -1,0 +1,228 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+model User {
+  id        String   @id @default(uuid())
+  username  String   @unique
+  name      String?
+  email     String   @unique
+  info      String?
+  resetToken  String?  // <-- Add this
+  resetTokenExpiry DateTime?
+  status    String   @default("active") // "invited", "active", "assigned"
+  password  String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  groups    Group[]  @relation("UserGroups") //roles
+
+}
+
+model Group {
+  id          String        @id @default(uuid())
+  name        String        @unique
+  users       User[]        @relation("UserGroups")
+  permissions Permission[]  @relation("GroupPermissions")
+}
+
+model Permission {
+  id        String   @id @default(uuid())
+  action    String   @unique
+  groups    Group[]  @relation("GroupPermissions")
+}
+
+model Rfp {
+  id                Int       @id @default(autoincrement())
+  typeOfRfp         String
+  RfpReference      String    @unique
+  startDate         String?
+  completionDate    String?
+  panelMeetingDate  String?
+  panelDecisionDate String?
+
+  LocationType    LocationType?
+  generalInfo     GeneralInfo?
+  location        Location?
+  flowMeasurement FlowMeasurement?
+  flowRegister    FlowMonitoringRegister?
+  data            Data?
+  maf             MAF?
+  attachments     FlowMeterAttachment[]
+}
+
+model LocationType {
+  id    Int    @id @default(autoincrement())
+  rfpId Int    @unique
+  type  String
+  rfp   Rfp    @relation(fields: [rfpId], references: [id])
+}
+
+model GeneralInfo {
+  id            Int      @id @default(autoincrement())
+  rfpId         Int      @unique
+  licensee      String
+  address       String
+  contactNumber String
+  reportDate    String
+  reportRef     String
+
+  responsiblePosition   String
+  responsibleDepartment String
+  fmIdScada             String
+  fmIdSwsAssetNo        String
+
+  siteManagerName String? // Optional
+  faxNumber       String? // Optional
+
+  rfp Rfp @relation(fields: [rfpId], references: [id])
+}
+
+model Location {
+  id             Int    @id @default(autoincrement())
+  rfpId          Int    @unique
+  region         String
+  stpcc          String
+  description    String
+  coordinateN    Float
+  coordinateE    Float
+  siteDrawingRef String
+  flowDiagramRef String
+
+  rfp Rfp @relation(fields: [rfpId], references: [id])
+}
+
+model FlowMeasurement {
+  id             Int     @id @default(autoincrement())
+  rfpId          Int     @unique
+  cumulativeFlow Boolean
+  fifteenMinFlow Boolean
+  eventRecording Boolean
+
+  rfp Rfp @relation(fields: [rfpId], references: [id])
+}
+
+model FlowMonitoringRegister {
+  id             Int @id @default(autoincrement())
+  rfpId          Int @unique
+  inventoryId    Int
+  installationId Int
+  maintenanceId  Int
+
+  rfp          Rfp          @relation(fields: [rfpId], references: [id])
+  inventory    Inventory    @relation(fields: [inventoryId], references: [id])
+  installation Installation @relation(fields: [installationId], references: [id])
+  maintenance  Maintenance  @relation(fields: [maintenanceId], references: [id])
+}
+
+model Inventory {
+  id                Int    @id @default(autoincrement())
+  make              String
+  type              String
+  model             String
+  serial            String
+  fmSize            String
+  pipelineSize      String
+  velocityRange     String
+  accuracyReading   String
+  accuracyFullScale String
+  readingMethod     String
+
+  flowRegister FlowMonitoringRegister[] // One-to-many inverse relation
+}
+
+model Installation {
+  id                  Int      @id @default(autoincrement())
+  meterInstallDate    String
+  meterRemovalDate    String
+  hydraulicUpstream   String?
+  hydraulicDownstream String?
+  environmental       String?
+  onSiteTesting       String?
+  safetyRisks         String?
+  securityOfLocation  String?
+
+  flowRegister FlowMonitoringRegister[] // One-to-many inverse relation
+}
+
+model Maintenance {
+  id                      Int     @id @default(autoincrement())
+  maintenanceRef          Boolean
+  preventativeScheduleRef Boolean
+
+  flowRegister FlowMonitoringRegister[] // One-to-many inverse relation
+}
+
+model Data {
+  id                      Int     @id @default(autoincrement())
+  rfpId                   Int     @unique
+  manualMethod            String?
+  dataLogger              String?
+  remoteReading           String?
+  outstationDetails       String?
+  storageDetails          String?
+  ubReport                String?
+  ubValue                 String?
+  dataManagementProcedure String?
+
+  rfp Rfp @relation(fields: [rfpId], references: [id])
+}
+
+model MAF {
+  id               Int     @id @default(autoincrement())
+  rfpId            Int     @unique
+  detail           String?
+  sopRef           String?
+  selectionSummary String?
+
+  rfp Rfp @relation(fields: [rfpId], references: [id])
+}
+
+model FlowMeterAttachment {
+  id         Int      @id @default(autoincrement())
+  rfpId      Int
+  type       String
+  filePath   String
+  uploadedAt DateTime @default(now())
+
+  rfp Rfp @relation(fields: [rfpId], references: [id])
+}
+
+
+
+
+
+model Device {
+  id            String    @id @default(uuid())
+
+  name          String    @unique
+  description   String?
+  type          String?
+  property      String?
+  enabled       Boolean   @default(false)
+  polling       Int?
+  lastConnected DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
+
+
+
+
+
+
+
+model Settings {
+  id                   String   @id @default(uuid())
+  system               String?
+  form                 String?
+  smtp                 String?
+  daqstore             String?
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+  
+}
