@@ -99,9 +99,7 @@ model Location {
 model FlowMeasurement {
   id             Int     @id @default(autoincrement())
   rfpId          Int     @unique
-  cumulativeFlow Boolean
-  fifteenMinFlow Boolean
-  eventRecording Boolean
+  selectedOption String?  // One of: "cumulativeFlow", "fifteenMinFlow", or "eventRecording"
 
   rfp Rfp @relation(fields: [rfpId], references: [id])
 }

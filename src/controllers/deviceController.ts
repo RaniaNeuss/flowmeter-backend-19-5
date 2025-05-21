@@ -264,10 +264,7 @@ export const deleteAllDevices = async (req: Request, res: Response): Promise<voi
   
 
 
-  
-
-
-// API to Connect to SQL Server via ODBC and Fetch Data
+// API to Connect to SQL Server via ODBC 
 export const connectODBCAndFetchData = async (req: Request, res: Response): Promise<void> => {
   try {
     const { dsn, query } = req.body;

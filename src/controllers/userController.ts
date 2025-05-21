@@ -7,7 +7,7 @@ import jwt from "jsonwebtoken";
 import { JWT_SECRET, REFRESH_SECRET } from "../lib/config";
 import { User as PrismaUser } from "@prisma/client";
 import crypto from "crypto";
-import { sendResetEmail } from "../lib/sendEmail";
+import { sendResetEmail } from "../lib/sendemail";
 declare global {
     namespace Express {
         interface User extends PrismaUser {}

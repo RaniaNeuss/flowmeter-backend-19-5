@@ -3,8 +3,6 @@
 import { Request, Response } from 'express';
 import prisma from '../prismaClient';
 import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library';
-// import { parseDate } from '../utils/dateUtils';
-import { buildGeneralInfo, buildInventory, buildInstallation, buildMaintenance } from '../builders/rfpBuilders';
 
 // export const createFullRfp = async (req: Request, res: Response): Promise<void> => {
 //   try {
@@ -272,10 +270,152 @@ import { buildGeneralInfo, buildInventory, buildInstallation, buildMaintenance }
 
 
 
+// export const createFullRfp = async (req: Request, res: Response): Promise<void> => {
+//   try {
+//     const {
+//       BasicInformation,
+//       GeneralInfo,
+//       LocationMeasurement,
+//       MonitoringDetails,
+//       FlowmeterDetails,
+//       FlowmeterInventory,
+//       FlowmeterInstallationMaintenance,
+//       DataCollectionExchange,
+//     } = req.body;
 
+//     const { typeOfRfp, rfpReference } = BasicInformation;
 
+//     if (!rfpReference?.trim()) {
+//       res.status(400).json({ error: 'rfpReference is required.' });
+//     }
 
+//     const duplicate = await prisma.rfp.findUnique({ where: { RfpReference: rfpReference } });
+//     if (duplicate) {
+//       res.status(409).json({ error: `Duplicate RfpReference: ${rfpReference}` });
+//     }
 
+//     if (!GeneralInfo?.licensee?.trim()) {
+//        res.status(400).json({ error: 'Licensee is required in GeneralInfo.' });
+//     }
+
+//     // Create nested inventory/install/maintenance if present
+//     const inventory = FlowmeterDetails?.flowMonitoring?.inventory
+//       ? await prisma.inventory.create({ data: FlowmeterDetails.flowMonitoring.inventory })
+//       : null;
+
+//     const installation = FlowmeterDetails?.flowMonitoring?.installation
+//       ? await prisma.installation.create({ data: FlowmeterDetails.flowMonitoring.installation })
+//       : null;
+
+//     const maintenance = FlowmeterDetails?.flowMonitoring?.maintenance
+//       ? await prisma.maintenance.create({ data: FlowmeterDetails.flowMonitoring.maintenance })
+//       : null;
+
+//     const rfp = await prisma.rfp.create({
+//       data: {
+//         typeOfRfp,
+//         RfpReference: rfpReference,
+//         startDate: DataCollectionExchange.startDate ?? undefined,
+//         completionDate: DataCollectionExchange.completionDate ?? undefined,
+//         panelMeetingDate: LocationMeasurement?.approvalDetails?.panelAppealMeeting,
+//         panelDecisionDate: LocationMeasurement?.approvalDetails?.panelAppealDecisionDate,
+
+//         LocationType: MonitoringDetails?.locationType?.type
+//           ? { create: { type: MonitoringDetails.locationType.type } }
+//           : undefined,
+
+//         generalInfo: {
+//           create: {
+//             licensee: GeneralInfo.licensee,
+//             address: GeneralInfo.address,
+//             contactNumber: GeneralInfo.contactNumber,
+//             faxNumber: GeneralInfo.faxNumber ?? '',
+//             reportDate: GeneralInfo.reportDate ?? new Date().toISOString(),
+//             reportRef: GeneralInfo.reportRef,
+//             responsiblePosition: GeneralInfo.responsiblePosition ?? '',
+//             responsibleDepartment: GeneralInfo.responsibleDepartment ?? '',
+//             fmIdScada: GeneralInfo.fmIdScada ?? '',
+//             fmIdSwsAssetNo: GeneralInfo.fmIdSwsAssetNo ?? '',
+//             siteManagerName: GeneralInfo.siteManagerName ?? '',
+//           },
+//         },
+
+//         location: MonitoringDetails?.location?.description
+//           ? {
+//               create: {
+//                 region: MonitoringDetails.location.region ?? '',
+//                 stpcc: MonitoringDetails.location.stpcc ?? '',
+//                 description: MonitoringDetails.location.description,
+//                 coordinateN: Number(MonitoringDetails.location.coordinateN) || 0,
+//                 coordinateE: Number(MonitoringDetails.location.coordinateE) || 0,
+//                 siteDrawingRef: MonitoringDetails.location.siteDrawingRef ?? '',
+//                 flowDiagramRef: MonitoringDetails.location.flowDiagramRef ?? '',
+//               },
+//             }
+//           : undefined,
+
+//         flowMeasurement: DataCollectionExchange?.data
+//           ? {
+//               create: {
+//                 cumulativeFlow: false,
+//                 fifteenMinFlow: false,
+//                 eventRecording: false,
+//               },
+//             }
+//           : undefined,
+
+//         flowRegister:
+//           inventory && installation && maintenance
+//             ? {
+//                 create: {
+//                   inventory: { connect: { id: inventory.id } },
+//                   installation: { connect: { id: installation.id } },
+//                   maintenance: { connect: { id: maintenance.id } },
+//                 },
+//               }
+//             : undefined,
+
+//         data: DataCollectionExchange?.data
+//           ? {
+//               create: DataCollectionExchange.data,
+//             }
+//           : undefined,
+
+//         maf: DataCollectionExchange?.maf
+//           ? {
+//               create: DataCollectionExchange.maf,
+//             }
+//           : undefined,
+
+//         attachments:
+//           DataCollectionExchange?.attachments?.length > 0
+//             ? {
+//                 create: DataCollectionExchange.attachments.map((att: any) => ({
+//                   type: att.type ?? '',
+//                   filePath: att.filePath ?? '',
+//                   uploadedAt: att.uploadedAt ? new Date(att.uploadedAt) : new Date(),
+//                 })),
+//               }
+//             : undefined,
+//       },
+//       include: {
+//         LocationType: true,
+//         generalInfo: true,
+//         location: true,
+//         flowMeasurement: true,
+//         flowRegister: { include: { inventory: true, installation: true, maintenance: true } },
+//         data: true,
+//         maf: true,
+//         attachments: true,
+//       },
+//     });
+
+//     res.status(201).json(rfp);
+//   } catch (err: any) {
+//     console.error('❌ createFullRfp error:', err);
+//      res.status(500).json({ error: err.message || 'Internal server error' });
+//   }
+// };
 
 export const createFullRfp = async (req: Request, res: Response): Promise<void> => {
   try {
@@ -298,38 +438,54 @@ export const createFullRfp = async (req: Request, res: Response): Promise<void> 
 
     const duplicate = await prisma.rfp.findUnique({ where: { RfpReference: rfpReference } });
     if (duplicate) {
-      res.status(409).json({ error: `Duplicate RfpReference: ${rfpReference}` });
+       res.status(409).json({ error: `Duplicate RfpReference: ${rfpReference}` });
     }
 
     if (!GeneralInfo?.licensee?.trim()) {
-       res.status(400).json({ error: 'Licensee is required in GeneralInfo.' });
+      res.status(400).json({ error: 'Licensee is required in GeneralInfo.' });
     }
 
-    // Create nested inventory/install/maintenance if present
     const inventory = FlowmeterDetails?.flowMonitoring?.inventory
       ? await prisma.inventory.create({ data: FlowmeterDetails.flowMonitoring.inventory })
-      : null;
+      : await prisma.inventory.create({
+          data: {
+            make: '', type: '', model: '', serial: '',
+            fmSize: '', pipelineSize: '', velocityRange: '',
+            accuracyReading: '', accuracyFullScale: '', readingMethod: ''
+          }
+        });
 
     const installation = FlowmeterDetails?.flowMonitoring?.installation
       ? await prisma.installation.create({ data: FlowmeterDetails.flowMonitoring.installation })
-      : null;
+      : await prisma.installation.create({
+          data: {
+            meterInstallDate: '',
+            meterRemovalDate: '',
+            hydraulicUpstream: '',
+            hydraulicDownstream: '',
+            environmental: '',
+            onSiteTesting: '',
+            safetyRisks: '',
+            securityOfLocation: ''
+          }
+        });
 
     const maintenance = FlowmeterDetails?.flowMonitoring?.maintenance
       ? await prisma.maintenance.create({ data: FlowmeterDetails.flowMonitoring.maintenance })
-      : null;
+      : await prisma.maintenance.create({ data: { maintenanceRef: false, preventativeScheduleRef: false } });
 
     const rfp = await prisma.rfp.create({
       data: {
         typeOfRfp,
         RfpReference: rfpReference,
-        startDate: DataCollectionExchange.startDate ?? undefined,
-        completionDate: DataCollectionExchange.completionDate ?? undefined,
-        panelMeetingDate: LocationMeasurement?.approvalDetails?.panelAppealMeeting,
-        panelDecisionDate: LocationMeasurement?.approvalDetails?.panelAppealDecisionDate,
+        startDate: DataCollectionExchange.startDate ?? '',
+        completionDate: DataCollectionExchange.completionDate ?? '',
+        panelMeetingDate: LocationMeasurement?.approvalDetails?.panelAppealMeeting ?? '',
+        panelDecisionDate: LocationMeasurement?.approvalDetails?.panelAppealDecisionDate ?? '',
 
         LocationType: MonitoringDetails?.locationType?.type
           ? { create: { type: MonitoringDetails.locationType.type } }
-          : undefined,
+          : { create: { type: '' } },
 
         generalInfo: {
           create: {
@@ -359,51 +515,54 @@ export const createFullRfp = async (req: Request, res: Response): Promise<void> 
                 flowDiagramRef: MonitoringDetails.location.flowDiagramRef ?? '',
               },
             }
-          : undefined,
-
-        flowMeasurement: DataCollectionExchange?.data
-          ? {
+          : {
               create: {
-                cumulativeFlow: false,
-                fifteenMinFlow: false,
-                eventRecording: false,
+                region: '', stpcc: '', description: '', coordinateN: 0, coordinateE: 0, siteDrawingRef: '', flowDiagramRef: ''
               },
-            }
-          : undefined,
+            },
 
-        flowRegister:
-          inventory && installation && maintenance
-            ? {
-                create: {
-                  inventory: { connect: { id: inventory.id } },
-                  installation: { connect: { id: installation.id } },
-                  maintenance: { connect: { id: maintenance.id } },
-                },
-              }
-            : undefined,
+        flowMeasurement: {
+          create: {
+            selectedOption: FlowmeterDetails?.flowMonitoring?.selectedOption ?? 'cumulativeFlow'
+          },
+        },
 
-        data: DataCollectionExchange?.data
-          ? {
-              create: DataCollectionExchange.data,
-            }
-          : undefined,
+        flowRegister: {
+          create: {
+            inventory: { connect: { id: inventory.id } },
+            installation: { connect: { id: installation.id } },
+            maintenance: { connect: { id: maintenance.id } },
+          },
+        },
 
-        maf: DataCollectionExchange?.maf
-          ? {
-              create: DataCollectionExchange.maf,
-            }
-          : undefined,
+        data: {
+          create: {
+            manualMethod: DataCollectionExchange?.data?.manualMethod ?? '',
+            dataLogger: DataCollectionExchange?.data?.dataLogger ?? '',
+            remoteReading: DataCollectionExchange?.data?.remoteReading ?? '',
+            outstationDetails: DataCollectionExchange?.data?.outstationDetails ?? '',
+            storageDetails: DataCollectionExchange?.data?.storageDetails ?? '',
+            ubReport: DataCollectionExchange?.data?.ubReport ?? '',
+            ubValue: DataCollectionExchange?.data?.ubValue ?? '',
+            dataManagementProcedure: DataCollectionExchange?.data?.dataManagementProcedure ?? '',
+          },
+        },
 
-        attachments:
-          DataCollectionExchange?.attachments?.length > 0
-            ? {
-                create: DataCollectionExchange.attachments.map((att: any) => ({
-                  type: att.type ?? '',
-                  filePath: att.filePath ?? '',
-                  uploadedAt: att.uploadedAt ? new Date(att.uploadedAt) : new Date(),
-                })),
-              }
-            : undefined,
+        maf: {
+          create: {
+            detail: DataCollectionExchange?.maf?.detail ?? '',
+            sopRef: DataCollectionExchange?.maf?.sopRef ?? '',
+            selectionSummary: DataCollectionExchange?.maf?.selectionSummary ?? '',
+          },
+        },
+
+        attachments: {
+          create: (DataCollectionExchange?.attachments ?? []).map((att: any) => ({
+            type: att.type ?? '',
+            filePath: att.filePath ?? '',
+            uploadedAt: att.uploadedAt ? new Date(att.uploadedAt) : new Date(),
+          })),
+        },
       },
       include: {
         LocationType: true,
@@ -420,13 +579,9 @@ export const createFullRfp = async (req: Request, res: Response): Promise<void> 
     res.status(201).json(rfp);
   } catch (err: any) {
     console.error('❌ createFullRfp error:', err);
-     res.status(500).json({ error: err.message || 'Internal server error' });
+    res.status(500).json({ error: err.message || 'Internal server error' });
   }
 };
-
-
-
-
 
 export const getFullRfps = async (req: Request, res: Response): Promise<void> => {
   try {
