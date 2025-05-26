@@ -7,15 +7,25 @@ datasource db {
   url      = "file:./dev.db"
 }
 
+enum UserStatus {
+  active
+  inactive
+  suspended
+  pending
+  banned
+}
 model User {
   id        String   @id @default(uuid())
   username  String   @unique
   name      String?
   email     String   @unique
   info      String?
-  resetToken  String?  // <-- Add this
+  resetToken  String?  
   resetTokenExpiry DateTime?
-  status    String   @default("active") // "invited", "active", "assigned"
+  status      UserStatus @default(pending)
+  otpCode     String?    
+  otpExpiry   DateTime?
+  loginAttempts Int      @default(0)
   password  String
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

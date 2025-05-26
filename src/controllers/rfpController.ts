@@ -2,7 +2,6 @@
 
 import { Request, Response } from 'express';
 import prisma from '../prismaClient';
-import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library';
 
 // export const createFullRfp = async (req: Request, res: Response): Promise<void> => {
 //   try {

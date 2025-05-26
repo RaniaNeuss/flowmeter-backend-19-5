@@ -121,9 +121,6 @@ export const deleteDevice = async (req: Request, res: Response): Promise<void> =
 
 
 
-
-
-
 export const testWebAPIConnection = async (req: Request, res: Response): Promise<void> => {
   try {
     console.log("Incoming request for WebAPI connection test:", req.body);
@@ -225,7 +222,6 @@ export const deleteAllDevices = async (req: Request, res: Response): Promise<voi
   
  
 
-
   export const getAllDevices = async (req: Request, res: Response): Promise<void> => {
     try {
       const devices = await prisma.device.findMany({
@@ -238,7 +234,6 @@ export const deleteAllDevices = async (req: Request, res: Response): Promise<voi
     }
   };
   
-
 
 
   export const getDeviceById = async (req: Request, res: Response): Promise<void> => {

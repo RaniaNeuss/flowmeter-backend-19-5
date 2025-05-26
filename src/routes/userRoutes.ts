@@ -1,9 +1,11 @@
 import { Router } from 'express';
-import { getUsers,refreshtoken,editUser,forgotPassword, resetPassword ,assignPermissionsToRole,getMyProfile, Register,createUser, deleteUser, getGroups, createGroup, deleteGroup, getUser, login , authStatus ,logout,editProfile } from '../controllers/userController';
+import { getUsers,refreshtoken,sendOtpToUser, verifyOtp,editUser,forgotPassword, resetPassword ,assignPermissionsToRole,getMyProfile, Register,createUser, deleteUser, getGroups, createGroup, deleteGroup, getUser, login , authStatus ,logout,editProfile } from '../controllers/userController';
 import passport from "passport";
 import jwt from "jsonwebtoken";
 import { JWT_SECRET, REFRESH_SECRET } from "../lib/config";
 import { authorizeRoles } from '../lib/authorizeRoles';
+import { authorizePermissions } from '../lib//authorizePermissions';
+import { UserStatus } from "@prisma/client"; // 👈 import the enum
 
 import { authenticateUser } from "../lib/authMiddleware";
 
@@ -25,10 +27,13 @@ interface User {
     password: string;
     name: string | null;
     email: string;
+    otpCode:string | null;
+    otpExpiry :Date | null;
     info: string | null;
     createdAt: Date;
+    loginAttempts: number;
     updatedAt: Date; 
-    status: string; 
+    status: UserStatus;
     resetToken : string| null;  // <-- Add this
   resetTokenExpiry: Date | null; // <-- Add this
   }
@@ -53,9 +58,10 @@ router.post('/assign-permissions', authenticateUser, authorizeRoles(['SuperAdmin
 
 router.get('/:id', authenticateUser, getUser); // Dynamic route
 router.put('/:id', authenticateUser, authorizeRoles(['SuperAdmin']), editUser); // Admin only
-router.delete('/:id', authenticateUser, authorizeRoles(['SuperAdmin']), deleteUser); // Admin only
+// router.delete('/:id', authenticateUser, authorizeRoles(['SuperAdmin']), deleteUser); // Admin only
+router.delete('/:id', authenticateUser, authorizeRoles(['Admin']), authorizePermissions(['users:canDelete']), deleteUser);
 
-
+router.post("/register", Register);
 
 
 
@@ -162,6 +168,12 @@ router.post("/logout", (req, res) => {
 });
 router.get('/auth/status', authStatus);
 
+
+/** ===========================
+ *     OTP VERIFICATION ROUTES
+ * =========================== */
+router.post('/auth/send-otp', sendOtpToUser);
+router.post('/auth/verify-otp', verifyOtp);
 
 /** ===========================
  *     PASSWORD RESET ROUTES

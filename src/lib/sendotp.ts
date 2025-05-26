@@ -1,6 +1,6 @@
 import nodemailer from "nodemailer";
 
-export const sendResetOtpEmail = async (to: string, otp: string) => {
+export const sendOtpEmail = async (to: string, otp: string) => {
   const transporter = nodemailer.createTransport({
     service: "gmail",
     auth: {
@@ -12,10 +12,10 @@ export const sendResetOtpEmail = async (to: string, otp: string) => {
   await transporter.sendMail({
     from: process.env.EMAIL_USER,
     to,
-    subject: "Your Password Reset OTP",
+    subject: "Verify your account",
     html: `
-      <p>You requested to reset your password.</p>
-      <p>Use the following OTP to reset it:</p>
+      <p>Welcome to our platform!</p>
+      <p>Please use the OTP below to verify your account:</p>
       <h2>${otp}</h2>
       <p>This code will expire in 10 minutes.</p>
     `,
