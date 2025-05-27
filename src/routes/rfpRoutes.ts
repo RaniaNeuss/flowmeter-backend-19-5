@@ -10,14 +10,13 @@ import {
   deleteRfp,
 } from '../controllers/rfpController';
 import { authenticateUser } from '../lib/authMiddleware';
-import { catchAsync } from '../utils/catchAsync';
 
 const router = Router();
 // Create a new RFP
 router.post('/create',  createFullRfp);
 
 // Get all RFPs
-router.get('/full', authenticateUser, getFullRfps);
+router.get('/full',  getFullRfps);
 
 // Get RFP by ID
 router.get('/:id', authenticateUser, getRfpById);

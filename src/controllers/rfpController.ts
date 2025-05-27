@@ -432,16 +432,17 @@ export const createFullRfp = async (req: Request, res: Response): Promise<void> 
     const { typeOfRfp, rfpReference } = BasicInformation;
 
     if (!rfpReference?.trim()) {
-      res.status(400).json({ error: 'rfpReference is required.' });
+      res.status(400).json({ error: 'rfpReference is required.' }); return;
     }
 
     const duplicate = await prisma.rfp.findUnique({ where: { RfpReference: rfpReference } });
-    if (duplicate) {
-       res.status(409).json({ error: `Duplicate RfpReference: ${rfpReference}` });
-    }
+   if (duplicate) {
+  res.status(409).json({ error: `Duplicate RfpReference: ${rfpReference}` });
+  return; // <-- REQUIRED to prevent continuing
+}
 
     if (!GeneralInfo?.licensee?.trim()) {
-      res.status(400).json({ error: 'Licensee is required in GeneralInfo.' });
+      res.status(400).json({ error: 'Licensee is required in GeneralInfo.' });return;
     }
 
     const inventory = FlowmeterDetails?.flowMonitoring?.inventory
