@@ -1,11 +1,6 @@
-// file: src/lib/authorizePermissions.ts
 import { Request, Response, NextFunction } from "express";
 import prisma from "../prismaClient";
 
-/**
- * Middleware to check if the user has one of the required permissions.
- * Usage: authorizePermissions(['users:canCreate'])
- */
 export function authorizePermissions(requiredPermissions: string[]) {
   return async function (req: Request, res: Response, next: NextFunction): Promise<void> {
     const userId = req.userId;
@@ -19,7 +14,7 @@ export function authorizePermissions(requiredPermissions: string[]) {
       const user = await prisma.user.findUnique({
         where: { id: userId },
         include: {
-          groups: {
+          group: {
             include: {
               permissions: true,
             },
@@ -32,9 +27,8 @@ export function authorizePermissions(requiredPermissions: string[]) {
         return;
       }
 
-      const userPermissions = user.groups.flatMap(group =>
-        group.permissions.map(p => p.action)
-      );
+      // Accessing the user's group via user.group instead of user.groups
+      const userPermissions = user.group.permissions.map((p: { action: string }) => p.action);
 
       const hasPermission = requiredPermissions.some(perm =>
         userPermissions.includes(perm)

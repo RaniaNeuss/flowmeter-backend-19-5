@@ -26,9 +26,7 @@ async function main() {
                 username: 'admin',
                 email: 'rania@neuss.com',
                 password: await bcrypt.hash('SuperAdmin@2025', 10),
-                groups: {
-                    connect: { id: superAdminGroup.id },
-                },
+                 groupId :1
             },
         });
         console.log(`SuperAdmin user '${superAdminUser.username}' created.`);
@@ -102,5 +100,5 @@ main()
     .catch((error) => {
         console.error("Seeding failed:", error);
         prisma.$disconnect();
-        process.exit(1);
+        
     });

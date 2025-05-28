@@ -7,7 +7,7 @@ import prisma from "../prismaClient";
  * and returns an Express middleware checking if the user
  * has at least one of those roles.
  */
-export function authorizeRoles(allowedRoles: string[]) {
+export function authorizeRoles(Role: string) {
   // Return a standard (req, res, next) function
   return function (req: Request, res: Response, next: NextFunction): void {
     // 1) We must have userId from authenticateUser
@@ -23,7 +23,7 @@ export function authorizeRoles(allowedRoles: string[]) {
     prisma.user
       .findUnique({
         where: { id: String(userId) },
-        include: { groups: true },
+        include: { group: true },
       })
       .then((user) => {
         if (!user) {
@@ -34,14 +34,11 @@ export function authorizeRoles(allowedRoles: string[]) {
         }
 
         // 3) Check if user has at least one group that is in allowedRoles
-        const userGroupNames = user.groups.map((g) => g.name);
-        const hasRole = userGroupNames.some((groupName) =>
-          allowedRoles.includes(groupName)
-        );
+       const hasRole = Role == user.group?.name    
         if (!hasRole) {
           res.status(403).json({
             error: "forbidden",
-            message: `only Admins allowed to make changes:}`,
+            message: `only ${user.group?.name} allowed to make changes:}`,
           });
           return;
         }

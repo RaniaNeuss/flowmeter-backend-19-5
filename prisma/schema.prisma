@@ -29,14 +29,15 @@ model User {
   password  String
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-  groups    Group[]  @relation("UserGroups") //roles
+  groupId         Int
+  group           Group     @relation(fields: [groupId], references: [id])
 
 }
 
 model Group {
-  id          String        @id @default(uuid())
+  id          Int           @id @default(autoincrement())
   name        String        @unique
-  users       User[]        @relation("UserGroups")
+  users       User[]
   permissions Permission[]  @relation("GroupPermissions")
 }
 
@@ -201,9 +202,6 @@ model FlowMeterAttachment {
 }
 
 
-
-
-
 model Device {
   id            String    @id @default(uuid())
 
@@ -218,12 +216,6 @@ model Device {
   updatedAt     DateTime  @updatedAt
 }
 
-
-
-
-
-
-
 model Settings {
   id                   String   @id @default(uuid())
   system               String?
@@ -231,6 +223,5 @@ model Settings {
   smtp                 String?
   daqstore             String?
   createdAt            DateTime @default(now())
-  updatedAt            DateTime @updatedAt
-  
+  updatedAt            DateTime @updatedAt  
 }

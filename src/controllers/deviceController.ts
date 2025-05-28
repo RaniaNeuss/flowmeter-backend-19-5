@@ -3,6 +3,7 @@ import { Request, Response } from 'express';
 import prisma from '../prismaClient';
 import deviceManager from '../runtime/devices/deviceManager';
 import odbc from 'odbc';
+import axios from 'axios';
 /**
  * Create a new device
  */
@@ -119,8 +120,6 @@ export const deleteDevice = async (req: Request, res: Response): Promise<void> =
   }
 };
 
-
-
 export const testWebAPIConnection = async (req: Request, res: Response): Promise<void> => {
   try {
     console.log("Incoming request for WebAPI connection test:", req.body);
@@ -155,7 +154,6 @@ export const testWebAPIConnection = async (req: Request, res: Response): Promise
     res.status(500).json({ error: "Internal server error" });
   }
 };
-
 
 
   export const deleteManyDevices = async (req: Request, res: Response): Promise<void> => {
@@ -197,7 +195,6 @@ export const testWebAPIConnection = async (req: Request, res: Response): Promise
     }
 };
 
-
 export const deleteAllDevices = async (req: Request, res: Response): Promise<void> => {
   try {
       // Delete all devices from the database
@@ -218,10 +215,6 @@ export const deleteAllDevices = async (req: Request, res: Response): Promise<voi
       res.status(500).json({ error: "unexpected_error", message: "An error occurred while deleting all devices." });
   }
 };
-
-  
- 
-
   export const getAllDevices = async (req: Request, res: Response): Promise<void> => {
     try {
       const devices = await prisma.device.findMany({
@@ -234,8 +227,6 @@ export const deleteAllDevices = async (req: Request, res: Response): Promise<voi
     }
   };
   
-
-
   export const getDeviceById = async (req: Request, res: Response): Promise<void> => {
     try {
       const { id } = req.params;
@@ -257,8 +248,6 @@ export const deleteAllDevices = async (req: Request, res: Response): Promise<voi
     }
   };
   
-
-
 // API to Connect to SQL Server via ODBC 
 export const connectODBCAndFetchData = async (req: Request, res: Response): Promise<void> => {
   try {

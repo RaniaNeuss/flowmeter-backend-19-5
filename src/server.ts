@@ -9,14 +9,9 @@ import rfpRoutes from './routes/rfpRoutes';
 import { PORT } from "./lib/config";
 import flowRoute from './routes/flowRoute';
 import deviceManager from './runtime/devices/deviceManager';
-
 import userRoutes from './routes/userRoutes';
-
 import deviceRoutes from './routes/deviceRoutes';
-
-
 const app = express();
-
 
 // Middlewares
 app.use(express.json());
@@ -42,29 +37,17 @@ app.use(passport.initialize());
 app.use(passport.session());
 app.use(cookieParser()); // Parse cookies
 
-
-
 // Routes
 app.use('/api/users', userRoutes);
 app.use('/api/rfp', rfpRoutes);
-
 app.use('/api/influx', flowRoute);
-
 app.use('/api/sewage', flowRoute);
 app.use('/api/users', userRoutes);
-
-
 app.use('/api/devices', deviceRoutes);
-
 // Initialize Socket.IO
 const { io, events,server } = initializeSocket(app);
 // Export the Socket.IO instance for use in other modules
 export { io };
-
-
-
-
-
 const getexistingdevices = async () => {
   try {
     const devices = await prisma.device.findMany({
@@ -87,10 +70,6 @@ const getexistingdevices = async () => {
     return []; // Return an empty array if an error occurs
   }
 };
-
-
-
-
 
 (async () => {
   try {

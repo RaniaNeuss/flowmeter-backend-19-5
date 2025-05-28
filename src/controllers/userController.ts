@@ -1,30 +1,28 @@
-
-import { Request, Response } from 'express';
+import { Request, Response,NextFunction } from 'express';
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 const prisma = new PrismaClient();
-import jwt from "jsonwebtoken";
-import { JWT_SECRET, REFRESH_SECRET } from "../lib/config";
+import jwt, { SignOptions } from 'jsonwebtoken';
+
+import {   JWT_SECRET,
+  REFRESH_SECRET,
+  ACCESS_TOKEN_EXPIRES_IN,
+  REFRESH_TOKEN_EXPIRES_IN,
+  COOKIE_ACCESS_TOKEN_MAX_AGE,
+  COOKIE_REFRESH_TOKEN_MAX_AGE } from "../lib/config";
 import { User as PrismaUser } from "@prisma/client";
-import crypto from "crypto";
 import { sendResetOtpEmail } from "../lib/sendemail";
 import { sendOtpEmail } from "../lib/sendotp"; // Make sure to create this helper
-
+import passport from "passport";
 declare global {
     namespace Express {
         interface User extends PrismaUser {}
     }
 }
-
-
-
-
 // Controller: Create User
 export const createUser = async (req: Request, res: Response): Promise<void> => {
     try {
         
-       
-
         // Retrieve userId from session
          const userId = req.userId;   
          
@@ -95,9 +93,7 @@ export const createUser = async (req: Request, res: Response): Promise<void> => 
                 email,
                 
                 password: hashedPassword,
-                groups: {
-                    connect: [{ id: existingGroup.id }],
-                },
+                groupId: existingGroup.id,  // Set groupId directly
             },
         });
 
@@ -158,6 +154,12 @@ export const Register = async (req: Request, res: Response): Promise<void> => {
       const otpExpiry = new Date(Date.now() + 1000 * 60 * 10); // 10 mins
   
       // 5. Create user with pending status
+      // Find the group to connect
+      const existingGroup = await prisma.group.findFirst();
+      if (!existingGroup) {
+        res.status(400).json({ error: "validation_error", message: "No group found to assign to user" });
+        return;
+      }
       const newUser = await prisma.user.create({
         data: {
           username,
@@ -166,6 +168,9 @@ export const Register = async (req: Request, res: Response): Promise<void> => {
           status: "pending",
           otpCode: otp,
           otpExpiry,
+          group: {
+            connect: { id: existingGroup.id }
+          }
         },
       });
   
@@ -182,8 +187,6 @@ export const Register = async (req: Request, res: Response): Promise<void> => {
       handleError(res, err, "api register user");
     }
   };
-
-
 
   export const verifyOtp = async (req: Request, res: Response): Promise<void> => {
     try {
@@ -218,172 +221,64 @@ export const Register = async (req: Request, res: Response): Promise<void> => {
   };
   
 
-
-// export const Register= async (req: Request, res: Response): Promise<void> => {
-//     try {
-        
-        
-       
-//         // Validate request body
-//         const { username, email, password  } = req.body;
-
-//         if (!username || typeof username !== "string") {
-//             console.warn("Validation failed: username is missing or invalid");
-//             res.status(400).json({ error: "validation_error", message: "Valid username is required" });
-//             return;
-//         }
-
-    
-//         if (!email || typeof email !== "string" || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-//              console.warn("Validation failed: email is missing or invalid");
-//             res.status(400).json({ error: "validation_error", message: "Valid email is required" });
-//             return;
-//         }
-
-//         if (!password || typeof password !== "string" || password.length < 6) {
-//              console.warn("Validation failed: password is missing or too short");
-//             res.status(400).json({ error: "validation_error", message: "Password must be at least 6 characters long" });
-//             return;
-//         }
-
-      
-//         // Check if the user already exists
-//         const existingEmail = await prisma.user.findUnique({ where: { email } });
-//         if (existingEmail) {
-//              console.warn(`User creation failed: email "${email}" already exists`);
-//             res.status(409).json({ error: "conflict_error", message: `email "${email}" is already taken` });
-//             return;
-//         }
-
-//         const existingUser = await prisma.user.findUnique({ where: { username } });
-//         if (existingUser) {
-//              console.warn(`User creation failed: username "${username}" already exists`);
-//             res.status(409).json({ error: "conflict_error", message: `username "${username}" is already taken` });
-//             return;
-//         }
-     
-
-//         // Hash the password
-//         const hashedPassword = await bcrypt.hash(password, 10);
-
-//         // Create the new user
-//         const newUser = await prisma.user.create({
-//             data: {
-//                 username,
-//                 email,
-                
-//                 password: hashedPassword,
-               
-//             },
-//         });
-
-//          console.info(`User created successfully: ${newUser.email}`);
-//         res.status(201).json({
-//             message: "User created successfully",
-//             user: {
-//                 id: newUser.id,
-//                 name:  newUser.name,
-//                 username: newUser.username,
-//                 email: newUser.email,
-               
-//             },
-//         });
-//     } catch (err: any) {
-//         console.error(`Failed to create user: ${err.message}`);
-//         handleError(res, err, "api create user");
-//     }
-// };
-
 // Controller: Sign in User
 
-export const login = async (req: Request, res: Response): Promise<void> => {
-    try {
-        const { email, password } = req.body;
+export const login = (req: Request, res: Response, next: NextFunction): void => {
+  passport.authenticate("local", async (err: any, user: any, info: any) => {
+    if (err) return res.status(500).json({ message: "Internal server error" });
+    if (!user) return res.status(401).json({ message: info?.message || "Invalid email or password" });
 
-        // Validate email and password
-        if (!email || !password) {
-            res.status(400).json({ message: "email and password are required" });
-            return;
-        }
+    req.logIn(user, (loginErr) => {
+      if (loginErr) return res.status(500).json({ message: "Login failed" });
 
-        // Check if the user exists
-        const user = await prisma.user.findUnique({
-            where: { email },
-            include: { groups: true },
-        });
+      req.session.userId = user.id;
 
-        if (!user) {
-            res.status(401).json({ message: "Invalid email or password" });
-            return;
-        }
+      const token = jwt.sign(
+        { id: user.id, email: user.email, group: user.group.name },
+        JWT_SECRET,
+        { expiresIn: ACCESS_TOKEN_EXPIRES_IN } as SignOptions
+      );
 
-        if (user.status !== "active") {
-            res.status(403).json({ message: "Account not active. Please verify your email." });
-            return;
-          }
+      const refreshToken = jwt.sign(
+        { id: user.id },
+        REFRESH_SECRET,
+        { expiresIn: REFRESH_TOKEN_EXPIRES_IN } as SignOptions
+      );
 
-        // Verify the password
-        const isPasswordValid = await bcrypt.compare(password, user.password);
-        if (!isPasswordValid) {
-            res.status(401).json({ message: "Invalid email or password" });
-            return;
-        }
+      res.cookie("token", token, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "strict",
+        maxAge: COOKIE_ACCESS_TOKEN_MAX_AGE,
+      });
 
-        
-        // Generate Access Token (short-lived, stored in localStorage on the frontend)
-        const token = jwt.sign(
-            { id: user.id, email: user.email },
-            JWT_SECRET,
-            { expiresIn: "15m" } // 15 minutes
-        );
+      res.cookie("refreshToken", refreshToken, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "strict",
+        maxAge: COOKIE_REFRESH_TOKEN_MAX_AGE,
+      });
 
-        // Generate Refresh Token (long-lived, stored in an HTTP-only cookie)
-        const refreshToken = jwt.sign(
-            { id: user.id },
-            REFRESH_SECRET,
-            { expiresIn: "7d" } // 7 days
-        );
+      console.log("Refresh Token Set:", refreshToken);
 
-        console.log("Refresh Token Set:", refreshToken);
-
-
-        // Store the user ID in the session for session-based login
-        req.session.userId = user.id;
-
-        res.cookie("token",  token, {
-            httpOnly: true,
-            secure: process.env.NODE_ENV === "production", // Set secure flag in production
-            sameSite: "strict",
-            maxAge:   2* 60 * 60 * 1000,
-        });
-        // Set refresh token as a secure HTTP-only cookie
-        res.cookie("refreshToken", refreshToken, {
-            httpOnly: true,
-            secure: process.env.NODE_ENV === "production", // Set secure flag in production
-            sameSite: "strict",
-            maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
-        });
-
-
-        console.log("Refresh Token Set:", refreshToken);
-
-
-        // Send access token to frontend for localStorage
-        res.status(200).json({
-            message: "User logged in successfully",
-            token,
-            expiresIn:  2* 60 * 60 * 1000, // 15 minutes in seconds
-            email: user.email,
-            groups: user.groups?.map((group) => group.name),
-        });
-    } catch (err: any) {
-        console.error("Failed to log in:", err.message);
-        res.status(500).json({ error: "unexpected_error", message: "An error occurred during login" });
+     res.status(200).json({
+  message: "User logged in successfully",
+  user: {
+    id: user.id,
+    email: user.email,
+    group: {
+      name: user.group.name
     }
+  },
+  // token,
+  // refreshToken,
+});
+
+    });
+  })(req, res, next);
 };
 
 
-  
 export const sendOtpToUser = async (req: Request, res: Response): Promise<void> => {
     try {
       const { email } = req.body;
@@ -423,11 +318,10 @@ export const sendOtpToUser = async (req: Request, res: Response): Promise<void> 
   };
 
 
-
-
 export const refreshtoken = async (req: Request, res: Response): Promise<void> => {
     
-    const refreshToken = req.cookies.refreshToken || req.body.refreshToken;
+    // If no session, try Bearer token authentication (for Mobile) or cookies
+    let refreshToken = req.cookies.refreshToken || req.headers['authorization']?.split(' ')[1];
 
     if (!refreshToken) {
         console.error("Refresh token not provided");
@@ -445,9 +339,7 @@ export const refreshtoken = async (req: Request, res: Response): Promise<void> =
             { id: decoded.id },
             JWT_SECRET,
             { expiresIn: "120m" } // 
-        );
-
-        
+        );        
 
         res.status(200).json({
             token: newtoken,
@@ -512,7 +404,7 @@ export const getUsers = async (req: Request, res: Response): Promise<void> => {
         // }
 
         const users = await prisma.user.findMany({
-            include: { groups: true },
+            include: { group: true },
         });
          console.info("Fetched all users successfully");
         res.status(200).json(users);
@@ -569,9 +461,8 @@ export const getMyProfile = async (req: Request, res: Response): Promise<void> =
                 status: true,
                 createdAt: true,
                 updatedAt: true,
-                groups: {
+                group: {
                     select: {
-                        id: true,
                         name: true,
                     },
                 },
@@ -595,10 +486,7 @@ export const getMyProfile = async (req: Request, res: Response): Promise<void> =
                 status: user.status,
                 createdAt: user.createdAt,
                 updatedAt: user.updatedAt,
-                groups: user.groups.map(group => ({
-                    id: group.id,
-                    name: group.name,
-                })),
+                group: user.group ? user.group.name : null, // Handle case where group might be null
             },
         });
 
@@ -612,30 +500,10 @@ export const getMyProfile = async (req: Request, res: Response): Promise<void> =
 // Controller: Edit User
 export const editProfile = async (req: Request, res: Response): Promise<void> => {
     try {
-   
-
-
-       // Retrieve userId from session
+     // Retrieve userId from session
         const userId = req.userId;   
             console.log('userId:', userId);
-
-    //    if (!userId) {
-    //        res.status(401).json({ error: 'unauthorized', message: 'User is not logged in' });
-    //        return;
-    //    }   
-       
-       
-       
        const {email, name, info,username,password ,group} = req.body; // Retrieve the fields to update from the request body
-
-        // Validate `id`
-        // if (!userId) {
-        //     res.status(400).json({
-        //         error: "validation_error",
-        //         message: "User ID is required.",
-        //     });
-        //     return;
-        // }
 
         // Check if the user exists
         const user = await prisma.user.findUnique({
@@ -687,25 +555,32 @@ export const editProfile = async (req: Request, res: Response): Promise<void> =>
         }
 
 
-        // Check if the group exists
-        const existingGroup = await prisma.group.findUnique({ where: { name: group } });
-        if (!existingGroup) {
-             console.warn(`User creation failed: group "${group}" does not exist`);
-            res.status(404).json({ error: "not_found", message: `Group "${group}" does not exist` });
-            return;
+         let groupUpdate = {};
+        if (group) {
+            const existingGroup = await prisma.group.findUnique({ where: { name: group } });
+            if (!existingGroup) {
+                res.status(404).json({ error: "not_found", message: `Group "${group}" does not exist.` });
+                return;
+            }
+            groupUpdate = { groupId: existingGroup.id };  // Update groupId directly
         }
-        // Hash the password
-        const hashedPassword = await bcrypt.hash(password, 10);
-        // Update the user in the database
-        const updatedUser = await prisma.user.update({
-            where: {  id: String(userId) },
-            data: {
-                email, name, info,username
-                ,  password: hashedPassword,
-                groups: {
-                    connect: [{ id: existingGroup.id }],
-                },
 
+        // Hash password only if updating password
+        let hashedPassword = undefined;
+        if (password && password.length >= 6) {
+            hashedPassword = await bcrypt.hash(password, 10);
+        }
+
+        // Update the user
+        const updatedUser = await prisma.user.update({
+            where: { id: String(userId) },
+            data: {
+                email,
+                name,
+                info,
+                username,
+                password: hashedPassword || undefined, // Update only if password is provided
+                ...groupUpdate, // Update groupId if necessary
                 updatedAt: new Date(),
             },
         });
@@ -715,11 +590,8 @@ export const editProfile = async (req: Request, res: Response): Promise<void> =>
             user: updatedUser,
         });
     } catch (err: any) {
-        console.error(`Failed to edit user with ID ${req.params.id}: ${err.message}`);
-        res.status(500).json({
-            error: "unexpected_error",
-            message: "An error occurred while updating the user.",
-        });
+        console.error(`Failed to edit user: ${err.message}`);
+        res.status(500).json({ error: "unexpected_error", message: "An error occurred while updating the user." });
     }
 };
 
@@ -729,12 +601,6 @@ export const editUser = async (req: Request, res: Response): Promise<void> => {
         const userId = req.userId; // The logged-in user making the request
         const { id } = req.params; // The ID of the user being edited
         const { email, name, info, username, password, group } = req.body;
-
-        // 1️⃣ **Check if user is authenticated**
-        // if (!userId) {
-        //     res.status(401).json({ error: "unauthorized", message: "User is not logged in" });
-        //     return;
-        // }
 
         // 2️⃣ **Ensure user ID is provided**
         if (!id) {
@@ -751,7 +617,7 @@ export const editUser = async (req: Request, res: Response): Promise<void> => {
 
         // 4️⃣ **Check if the logged-in user is an admin OR editing their own account**
         const isAdmin = await prisma.user.findFirst({
-            where: { id: userId, groups: { some: { name: "SuperAdmin" } } },
+            where: { id: userId, groupId: 1 },
         });
 
         if (!isAdmin && userId !== id) {
@@ -872,13 +738,7 @@ export const getGroups = async (req: Request, res: Response): Promise<void> => {
      
        // Retrieve userId from session
         const userId = req.userId;       console.log('userId:', userId);
-
-    //    if (!userId) {
-    //        res.status(401).json({ error: 'unauthorized', message: 'User is not logged in' });
-    //        return;
-    //    }
-
-        const groups = await prisma.group.findMany();
+         const groups = await prisma.group.findMany();
          console.info("Fetched all groups successfully");
         res.status(200).json(groups);
     } catch (err: any) {
@@ -895,11 +755,6 @@ export const createGroup = async (req: Request, res: Response): Promise<void> =>
 
        // Retrieve userId from session
         const userId = req.userId;       console.log('userId:', userId);
-
-    //    if (!userId) {
-    //        res.status(401).json({ error: 'unauthorized', message: 'User is not logged in' });
-    //        return;
-    //    }
 
         const { name } = req.body;
 
@@ -926,20 +781,11 @@ export const createGroup = async (req: Request, res: Response): Promise<void> =>
 // Controller: Delete Group by ID
 export const deleteGroup = async (req: Request, res: Response): Promise<void> => {
     try {
-   
-          
-
-     
 
        // Retrieve userId from session
         const userId = req.userId;       console.log('userId:', userId);
 
-    //    if (!userId) {
-    //        res.status(401).json({ error: 'unauthorized', message: 'User is not logged in' });
-    //        return;
-    //    }
-
-        await prisma.group.delete({ where: { id: String(userId) } });
+        await prisma.group.delete({ where: { id: Number(userId) } });
         console.info(`Group deleted successfully: ${userId}`);
         res.status(204).end();
     } catch (err: any) {
@@ -973,130 +819,6 @@ export const assignPermissionsToRole = async (req: Request, res: Response): Prom
         res.status(500).json({ error: "unexpected_error", message: "Failed to update permissions" });
     }
 };
-
-// export const forgotPassword = async (req: Request, res: Response): Promise<void> => {
-//   try {
-//     const userId = req.userId;
-//     if (!userId) {
-//       res.status(401).json({ message: "Unauthorized" });
-//       return;
-//     }
-
-//     const { email } = req.body;
-//     if (!email) {
-//       res.status(400).json({ message: "Email is required" });
-//       return;
-//     }
-
-//     const user = await prisma.user.findUnique({ where: { email } });
-//     if (!user) {
-//       res.status(404).json({ message: "Email not found" });
-//       return;
-//     }
-
-//     const token = crypto.randomBytes(32).toString("hex");
-//     const expiry = new Date(Date.now() + 1000 * 60 * 15); // 15 mins
-
-//     await prisma.user.update({
-//       where: { email },
-//       data: {
-//         resetToken: token,
-//         resetTokenExpiry: expiry,
-//       },
-//     });
-
-//     await sendResetEmail(email, token);
-//     res.json({ message: "Password reset link sent to email." });
-//   } catch (err: any) {
-//     console.error("forgotPassword error:", err.message);
-//     res.status(500).json({ error: "unexpected_error", message: err.message });
-//   }
-// };
-
-// export const resetPassword = async (req: Request, res: Response): Promise<void> => {
-//   try {
-//     const userId = req.userId;
-//     if (!userId) {
-//       res.status(401).json({ message: "Unauthorized" });
-//       return;
-//     }
-
-//     const { token, newPassword } = req.body;
-
-//     if (!token || !newPassword) {
-//       res.status(400).json({ message: "Token and new password are required" });
-//       return;
-//     }
-
-//     const user = await prisma.user.findFirst({
-//       where: {
-//         resetToken: token,
-//         resetTokenExpiry: { gt: new Date() },
-//       },
-//     });
-
-//     if (!user) {
-//       res.status(400).json({ message: "Invalid or expired token" });
-//       return;
-//     }
-
-//     const hashedPassword = await bcrypt.hash(newPassword, 10);
-//     await prisma.user.update({
-//       where: { id: user.id },
-//       data: {
-//         password: hashedPassword,
-//         resetToken: null,
-//         resetTokenExpiry: null,
-//       },
-//     });
-
-//     res.json({ message: "Password has been reset successfully." });
-//   } catch (err: any) {
-//     console.error("resetPassword error:", err.message);
-//     res.status(500).json({ error: "unexpected_error", message: err.message });
-//   }
-// };
-
-
-// export const forgotPassword = async (req: Request, res: Response): Promise<void> => {
-//   try {
-//     const { email } = req.body;
-//     if (!email) {
-//       res.status(400).json({ message: "Email is required" });
-//       return;
-//     }
-
-//     const user = await prisma.user.findUnique({ where: { email } });
-//     if (!user) {
-//       res.status(404).json({ message: "Email not found" });
-//       return;
-//     }
-
-//     const token = crypto.randomBytes(32).toString("hex");
-//     const expiry = new Date(Date.now() + 1000 * 60 * 15); // 15 mins
-
-//     await prisma.user.update({
-//       where: { email },
-//       data: {
-//         resetToken: token,
-//         resetTokenExpiry: expiry,
-//       },
-//     });
-
-//     await sendResetEmail(email, token);
-//     res.json({ message: "Password reset link sent to email." });
-//   } catch (err: any) {
-//     console.error("forgotPassword error:", err.message);
-//     res.status(500).json({ error: "unexpected_error", message: err.message });
-//   }
-// };
-
-
-
-
-
-
-
 
 export const forgotPassword = async (req: Request, res: Response): Promise<void> => {
   try {
@@ -1141,51 +863,6 @@ function handleError(res: Response, err: any, context: string): void {
         console.error(`${context}: ${err}`);
     }
 }
-
-
-
-
-// export const resetPassword = async (req: Request, res: Response): Promise<void> => {
-//   try {
-//     const { token, newPassword } = req.body;
-
-//     if (!token || !newPassword) {
-//       res.status(400).json({ message: "Token and new password are required" });
-//       return;
-//     }
-
-//     const user = await prisma.user.findFirst({
-//       where: {
-//         resetToken: token,
-//         resetTokenExpiry: { gt: new Date() },
-//       },
-//     });
-
-//     if (!user) {
-//       res.status(400).json({ message: "Invalid or expired token" });
-//       return;
-//     }
-
-//     const hashedPassword = await bcrypt.hash(newPassword, 10);
-//     await prisma.user.update({
-//       where: { id: user.id },
-//       data: {
-//         password: hashedPassword,
-//         resetToken: null,
-//         resetTokenExpiry: null,
-//       },
-//     });
-
-//     res.json({ message: "Password has been reset successfully." });
-//   } catch (err: any) {
-//     console.error("resetPassword error:", err.message);
-//     res.status(500).json({ error: "unexpected_error", message: err.message });
-//   }
-// };
-
-
-
-
 export const resetPassword = async (req: Request, res: Response): Promise<void> => {
   try {
     const { email, otp, newPassword } = req.body;
@@ -1228,3 +905,146 @@ export const resetPassword = async (req: Request, res: Response): Promise<void> 
 
 
 
+
+
+
+
+
+// export const login = (req: Request, res: Response, next: NextFunction): void => {
+//   passport.authenticate("local", async (err: any, user: any, info: any) => {
+//     if (err) {
+//       console.error("Authentication error:", err);
+//       return res.status(500).json({ message: "Internal server error" });
+//     }
+
+//     if (!user) {
+//       return res.status(401).json({ message: info?.message || "Invalid email or password" });
+//     }
+
+//     req.logIn(user, (loginErr) => {
+//       if (loginErr) {
+//         console.error("Login error:", loginErr);
+//         return res.status(500).json({ message: "Login failed" });
+//       }
+
+//       req.session.userId = user.id;
+
+//       const token = jwt.sign(
+//         { id: user.id, email: user.email, group: user.group.name },
+//         JWT_SECRET,
+//         { expiresIn: ACCESS_TOKEN_EXPIRES_IN }
+//       );
+
+//       const refreshToken = jwt.sign(
+//         { id: user.id },
+//         REFRESH_SECRET,
+//         { expiresIn: "7d" }
+//       );
+
+//       res.cookie("token", token, {
+//         httpOnly: true,
+//         secure: process.env.NODE_ENV === "production",
+//         sameSite: "strict",
+//         maxAge: 2 * 60 * 60 * 1000,
+//       });
+
+//       res.cookie("refreshToken", refreshToken, {
+//         httpOnly: true,
+//         secure: process.env.NODE_ENV === "production",
+//         sameSite: "strict",
+//         maxAge: 7 * 24 * 60 * 60 * 1000,
+//       });
+
+//       console.log("Refresh Token Set:", refreshToken);
+
+//       res.status(200).json({
+//         message: "User logged in successfully",
+//         // token,
+//         // refreshToken,
+//       });
+//     });
+//   })(req, res, next);
+// };
+
+
+
+
+
+// export const login = async (req: Request, res: Response): Promise<void> => {
+//     try {
+//         const { email, password } = req.body;
+
+//         // Validate email and password
+//         if (!email || !password) {
+//             res.status(400).json({ message: "email and password are required" });
+//             return;
+//         }
+
+//         // Check if the user exists
+//         const user = await prisma.user.findUnique({
+//             where: { email },
+//             include: { group: true },
+//         });
+
+//         if (!user) {
+//             res.status(401).json({ message: "Invalid email or password" });
+//             return;
+//         }
+
+//         if (user.status !== "active") {
+//             res.status(403).json({ message: " Your Account is not active" });
+//             return;
+//           }
+
+//         // Verify the password
+//         const isPasswordValid = await bcrypt.compare(password, user.password);
+//         if (!isPasswordValid) {
+//             res.status(401).json({ message: "Invalid email or password" });
+//             return;
+//         }
+//         // Generate Access Token (short-lived, stored in localStorage on the frontend)
+//         const token = jwt.sign(
+//             { id: user.id, email: user.email , group: user.group.name},
+//             JWT_SECRET,
+//             { expiresIn: "15m" } // 15 minutes
+//         );
+
+//         // Generate Refresh Token (long-lived, stored in an HTTP-only cookie)
+//         const refreshToken = jwt.sign(
+//             { id: user.id },
+//             REFRESH_SECRET,
+//             { expiresIn: "7d" } // 7 days
+//         );
+
+//         console.log("Refresh Token Set:", refreshToken);
+
+
+//         // Store the user ID in the session for session-based login
+//         req.session.userId = user.id;
+
+//         res.cookie("token",  token, {
+//             httpOnly: true,
+//             secure: process.env.NODE_ENV === "production", // Set secure flag in production
+//             sameSite: "strict",
+//             maxAge:   2* 60 * 60 * 1000,
+//         });
+//         // Set refresh token as a secure HTTP-only cookie
+//         res.cookie("refreshToken", refreshToken, {
+//             httpOnly: true,
+//             secure: process.env.NODE_ENV === "production", // Set secure flag in production
+//             sameSite: "strict",
+//             maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+//         });
+
+
+//         console.log("Refresh Token Set:", refreshToken);
+//         // Send access token to frontend for localStorage
+//         res.status(200).json({
+//             message: "User logged in successfully",
+//             token,refreshToken
+//         });
+//     } catch (err: any) {
+//         console.error("Failed to log in:", err.message);
+//         res.status(500).json({ error: "unexpected_error", message: "An error occurred during login" });
+//     }
+// };

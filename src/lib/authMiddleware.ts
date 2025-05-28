@@ -15,7 +15,6 @@ export const authenticateUser = (req: Request, res: Response, next: NextFunction
         req.userId = req.session.userId; // Attach userId from session
         return next(); // Call next middleware
     }
-
     // 2. Check JWT-Based Authentication
     const authHeader = req.headers.authorization;
     if (authHeader && authHeader.startsWith("Bearer ")) {
