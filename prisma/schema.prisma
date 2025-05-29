@@ -148,12 +148,12 @@ model Installation {
   id                  Int      @id @default(autoincrement())
   meterInstallDate    String
   meterRemovalDate    String
-  hydraulicUpstream   String?
-  hydraulicDownstream String?
-  environmental       String?
-  onSiteTesting       String?
-  safetyRisks         String?
-  securityOfLocation  String?
+  hydraulicUpstream   String
+  hydraulicDownstream String
+  environmental       String
+  onSiteTesting       String
+  safetyRisks         String
+  securityOfLocation  String
 
   flowRegister FlowMonitoringRegister[] // One-to-many inverse relation
 }
@@ -169,14 +169,14 @@ model Maintenance {
 model Data {
   id                      Int     @id @default(autoincrement())
   rfpId                   Int     @unique
-  manualMethod            String?
-  dataLogger              String?
-  remoteReading           String?
-  outstationDetails       String?
-  storageDetails          String?
-  ubReport                String?
-  ubValue                 String?
-  dataManagementProcedure String?
+  manualMethod            String
+  dataLogger              String
+  remoteReading           String
+  outstationDetails       String
+  storageDetails          String
+  ubReport                String
+  ubValue                 String
+  dataManagementProcedure String
 
   rfp Rfp @relation(fields: [rfpId], references: [id])
 }
@@ -184,9 +184,9 @@ model Data {
 model MAF {
   id               Int     @id @default(autoincrement())
   rfpId            Int     @unique
-  detail           String?
-  sopRef           String?
-  selectionSummary String?
+  detail           String
+  sopRef           String
+  selectionSummary String
 
   rfp Rfp @relation(fields: [rfpId], references: [id])
 }

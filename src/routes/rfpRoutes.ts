@@ -7,10 +7,10 @@ import {
   getFullRfps,
   getRfpById,
   patchRfp,
-  deleteRfp,
+  deleteRfp,uploadFile
 } from '../controllers/rfpController';
 import { authenticateUser } from '../lib/authMiddleware';
-
+import multer from 'multer';
 const router = Router();
 // Create a new RFP
 router.post('/create',  createFullRfp);
@@ -30,4 +30,7 @@ router.patch('/:id', authenticateUser, patchRfp);
 // Delete RFP by ID
 router.delete('/:id', authenticateUser, deleteRfp);
 
+const upload = multer({ dest: 'uploads/' });
+
+router.post('/upload', upload.any(), uploadFile);
 export default router;

@@ -398,11 +398,6 @@ export const getUsers = async (req: Request, res: Response): Promise<void> => {
          const userId = req.userId;       
           console.log('userId:', userId);
 
-        // if (!userId) {
-        //     res.status(401).json({ error: 'unauthorized', message: 'User is not logged in' });
-        //     return;
-        // }
-
         const users = await prisma.user.findMany({
             include: { group: true },
         });
