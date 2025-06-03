@@ -33,5 +33,5 @@ router.delete('/:id', authenticateUser, deleteRfp);
 
 const upload = multer({ dest: 'uploads/' });
 
-router.post('/upload', upload.any(), uploadFile);
+router.post('/upload',authenticateUser, upload.any(), uploadFile);
 export default router;

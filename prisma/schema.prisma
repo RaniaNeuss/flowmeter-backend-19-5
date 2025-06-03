@@ -31,6 +31,7 @@ model User {
   updatedAt DateTime @updatedAt
   groupId         Int
   group           Group     @relation(fields: [groupId], references: [id])
+  flowMeterAttachments FlowMeterAttachment[]
 
 }
 
@@ -192,12 +193,32 @@ model MAF {
 }
 
 model FlowMeterAttachment {
-  id         Int      @id @default(autoincrement())
+  id                String   @id @default(uuid())
   rfpId      Int
   type       String
   filePath   String
+  filename_disk     String?
+  filename_download String?
+  folderId         Int?     // New field
+  folderPath       String?  // (Optional) computed value like 'uploads/folderId/filename'
   uploadedAt DateTime @default(now())
+  createdAt  DateTime @default(now())
+  title             String?
+  description       String?
+  location          String?
+  tags              String?
+  width             Int?
+  height            Int?
+  duration          Float?
+  filesize          Int?
+  
+ 
 
+
+
+
+  uploaderId       String?  // new
+  uploader         User?    @relation(fields: [uploaderId], references: [id])
   rfp Rfp @relation(fields: [rfpId], references: [id])
 }
 

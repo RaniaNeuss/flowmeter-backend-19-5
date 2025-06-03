@@ -4,7 +4,8 @@ import { Request, Response } from 'express';
 import prisma from '../prismaClient';
 import multer from 'multer';
 import fs from 'fs/promises';
-
+import path from 'path'; // To get the file extension easily
+import { v4 as uuidv4 } from 'uuid';
 
 
 export const uploadFile = async (req: Request, res: Response): Promise<void> => {
@@ -13,35 +14,83 @@ export const uploadFile = async (req: Request, res: Response): Promise<void> => 
     console.log("🧾 req.body:", req.body);
     console.log("📎 req.files:", req.files);
 
-    const file = (req.files as Express.Multer.File[])?.[0]; // ✅ FIXED
-    const { type, rfpid } = req.body;
+    const file = (req.files as Express.Multer.File[])?.[0];
+    const {
+      rfpid,
+      filename_download,
+      title,
+      description,
+      location,
+      tags,
+      width,
+      height,
+      duration,
+      folderId
+    } = req.body;
 
-    if (!file || !type || !rfpid) {
-      console.warn("❗ Missing one of file, type, or rfpid.");
-      res.status(400).json({ error: 'File, type, and rfpid are required.' });
+    // Get uploader ID from auth middleware
+    const uploaderId = req.userId || null;
+
+    if (!file || !rfpid) {
+      res.status(400).json({ error: 'File and rfpId are required.' });
       return;
     }
 
-    const buffer = await fs.readFile(file.path);
-    const fileAsString = buffer.toString('utf-8');
+    const stats = await fs.stat(file.path);
 
+    // Determine file type from extension
+    const extension = path.extname(file.originalname).substring(1).toLowerCase();
+    const type = extension;
+
+    // Generate UUID for attachment id
+    const id = uuidv4();
+
+    // Compute folder path and file name
+    const uploadsBase = path.join(file.destination, folderId ? String(folderId) : '');
+    await fs.mkdir(uploadsBase, { recursive: true });
+    const filenameDisk = `${id}.${type}`;
+    const newFilePath = path.join(uploadsBase, filenameDisk);
+
+    // Move file to the final path
+    await fs.rename(file.path, newFilePath);
+
+    // Compute the folderPath (optional)
+    const folderPath = folderId ? path.join('uploads', String(folderId), filenameDisk) : path.join('uploads', filenameDisk);
+
+    // Save record in DB
     const attachment = await prisma.flowMeterAttachment.create({
       data: {
+        id,  // UUID
         rfpId: Number(rfpid),
+        uploaderId,
+        folderId: folderId ? parseInt(folderId, 10) : null,
         type,
-        filePath: fileAsString,
+        filePath: folderPath,
+        filename_disk: filenameDisk,
+        filename_download: filename_download || file.originalname,
         uploadedAt: new Date(),
-      },
+        createdAt: new Date(),
+        title: title || null,
+        description: description || null,
+        location: location || null,
+        tags: tags || null,
+        width: width ? parseInt(width, 10) : null,
+        height: height ? parseInt(height, 10) : null,
+        duration: duration ? parseFloat(duration) : null,
+        filesize: stats.size
+      }
     });
 
-    await fs.unlink(file.path);
-
-    res.status(201).json({ message: 'File uploaded and stored as string.', attachment });
+    res.status(201).json({
+      message: 'File uploaded successfully.',
+      attachment
+    });
   } catch (err: any) {
     console.error('❌ Upload error:', err);
     res.status(500).json({ error: 'Failed to upload file.', details: err.message });
   }
 };
+
 
 export const createFullRfp = async (req: Request, res: Response): Promise<void> => {
   try {
@@ -280,12 +329,6 @@ export const deleteRfp = async (req: Request, res: Response): Promise<void> => {
 };
 
 
-
-
-
-
-
-
 export const patchRfp = async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
@@ -389,7 +432,65 @@ export const patchRfp = async (req: Request, res: Response): Promise<void> => {
 };
 
 
-// export const patchRfp =async (req: Request, res: Response): Promise<void> => {
+
+export const getFilteredRfps = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { page = 1, limit = 10, search = '', typeFilter = '', licenseeFilter = '' } = req.body;
+    const skip = (Number(page) - 1) * Number(limit);
+
+    const filters: any[] = [];
+
+    if (search) {
+      filters.push({
+        OR: [
+          { RfpReference: { contains: search } },
+          { typeOfRfp: { contains: search } },
+          { generalInfo: { is: { licensee: { contains: search } } } },
+        ],
+      });
+    }
+
+    if (typeFilter) {
+      filters.push({ typeOfRfp: { equals: typeFilter } });
+    }
+
+    if (licenseeFilter) {
+      filters.push({ generalInfo: { is: { licensee: { equals: licenseeFilter } } } });
+    }
+
+    const where = filters.length > 0 ? { AND: filters } : {};
+
+    const [data, total] = await Promise.all([
+      prisma.rfp.findMany({
+        where,
+        skip,
+        take: Number(limit),
+        orderBy: { id: 'desc' },
+        include: {
+          LocationType: true,
+          generalInfo: true,
+          location: true,
+          flowMeasurement: true,
+          flowRegister: { include: { inventory: true, installation: true, maintenance: true } },
+          data: true,
+          maf: true,
+          attachments: true,
+        },
+      }),
+      prisma.rfp.count({ where }),
+    ]);
+
+    res.status(200).json({
+      data,
+      meta: { total, page: Number(page), lastPage: Math.ceil(total / Number(limit)) },
+    });
+
+  } catch (err: any) {
+    console.error('❌ getFilteredRfps error:', err);
+    res.status(500).json({ error: err.message || 'Internal server error' });
+  }
+};
+
 //   try {
 //     const { id } = req.params;
 //     const patchData = req.body;
@@ -546,65 +647,68 @@ export const patchRfp = async (req: Request, res: Response): Promise<void> => {
 //   }
 // };
 
-export const getFilteredRfps = async (req: Request, res: Response): Promise<void> => {
-  try {
-    const { page = 1, limit = 10, search = '', typeFilter = '', licenseeFilter = '' } = req.body;
-    const skip = (Number(page) - 1) * Number(limit);
-
-    const filters: any[] = [];
-
-    if (search) {
-      filters.push({
-        OR: [
-          { RfpReference: { contains: search } },
-          { typeOfRfp: { contains: search } },
-          { generalInfo: { is: { licensee: { contains: search } } } },
-        ],
-      });
-    }
-
-    if (typeFilter) {
-      filters.push({ typeOfRfp: { equals: typeFilter } });
-    }
-
-    if (licenseeFilter) {
-      filters.push({ generalInfo: { is: { licensee: { equals: licenseeFilter } } } });
-    }
-
-    const where = filters.length > 0 ? { AND: filters } : {};
-
-    const [data, total] = await Promise.all([
-      prisma.rfp.findMany({
-        where,
-        skip,
-        take: Number(limit),
-        orderBy: { id: 'desc' },
-        include: {
-          LocationType: true,
-          generalInfo: true,
-          location: true,
-          flowMeasurement: true,
-          flowRegister: { include: { inventory: true, installation: true, maintenance: true } },
-          data: true,
-          maf: true,
-          attachments: true,
-        },
-      }),
-      prisma.rfp.count({ where }),
-    ]);
-
-    res.status(200).json({
-      data,
-      meta: { total, page: Number(page), lastPage: Math.ceil(total / Number(limit)) },
-    });
-
-  } catch (err: any) {
-    console.error('❌ getFilteredRfps error:', err);
-    res.status(500).json({ error: err.message || 'Internal server error' });
-  }
-};
 
 
+
+
+// export const uploadFile = async (req: Request, res: Response): Promise<void> => {
+//   try {
+//     console.log("📥 Upload request received.");
+//     console.log("🧾 req.body:", req.body);
+//     console.log("📎 req.files:", req.files);
+
+//     const file = (req.files as Express.Multer.File[])?.[0];
+//     const {
+//       type,
+//       rfpid,
+//       title,
+//       description,
+//       location,
+//       tags,
+//       width,
+//       height,
+//       duration,
+//       charset
+//     } = req.body;
+
+//     if (!file || !type || !rfpid) {
+//       res.status(400).json({ error: 'File, type, and rfpid are required.' });
+//       return;
+//     }
+
+//     const buffer = await fs.readFile(file.path);
+//     const fileAsString = buffer.toString('utf-8');
+//     const stats = await fs.stat(file.path);
+
+//     const attachment = await prisma.flowMeterAttachment.create({
+//       data: {
+//         rfpId: Number(rfpid),
+//         type,
+//         filePath: fileAsString,
+//         filename_disk: file.filename,
+//         filename_download: file.originalname,
+//         uploadedAt: new Date(),
+//         createdAt: new Date(),
+//         title: title || null,
+//         description: description || null,
+//         location: location || null,
+//         tags: tags || null,
+//         width: width ? parseInt(width, 10) : null,
+//         height: height ? parseInt(height, 10) : null,
+//         duration: duration ? parseFloat(duration) : null,
+//         filesize: stats.size,
+//         charset: charset || null,
+//       },
+//     });
+
+//     await fs.unlink(file.path);
+
+//     res.status(201).json({ message: 'File uploaded successfully.', attachment });
+//   } catch (err: any) {
+//     console.error('❌ Upload error:', err);
+//     res.status(500).json({ error: 'Failed to upload file.', details: err.message });
+//   }
+// };
 
 
 // export const createFullRfp = async (req: Request, res: Response): Promise<void> => {
