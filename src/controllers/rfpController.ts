@@ -251,35 +251,48 @@ export const getRfpById = async (req: Request, res: Response): Promise<void> => 
 export const deleteRfp = async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
-    const existing = await prisma.rfp.findUnique({ where: { id: Number(id) } });
+    const rfpId = Number(id);
 
+    const existing = await prisma.rfp.findUnique({ where: { id: rfpId } });
     if (!existing) {
-    res.status(404).json({ error: 'RFP not found' });
+      res.status(404).json({ error: 'RFP not found' });
+      return;
     }
 
-    await prisma.rfp.delete({ where: { id: Number(id) } });
+    // Delete all dependent records in correct order:
+    await prisma.flowMeterAttachment.deleteMany({ where: { rfpId } });
+    await prisma.data.deleteMany({ where: { rfpId } });
+    await prisma.mAF.deleteMany({ where: { rfpId } });
+    await prisma.flowMonitoringRegister.deleteMany({ where: { rfpId } });
+    await prisma.flowMeasurement.deleteMany({ where: { rfpId } });
+    await prisma.location.deleteMany({ where: { rfpId } });
+    await prisma.generalInfo.deleteMany({ where: { rfpId } });
+    await prisma.locationType.deleteMany({ where: { rfpId } });
 
-    res.status(200).json({ message: 'RFP deleted successfully' });
+    // Delete the RFP itself
+    await prisma.rfp.delete({ where: { id: rfpId } });
 
+    res.status(200).json({ message: 'RFP and its related data deleted successfully' });
   } catch (err: any) {
     console.error('❌ deleteRfp error:', err);
     res.status(500).json({ error: err.message || 'Internal server error' });
   }
 };
 
-export const patchRfp =async (req: Request, res: Response): Promise<void> => {
+
+
+
+
+
+
+
+export const patchRfp = async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
     const patchData = req.body;
 
-    const existing = await prisma.rfp.findUnique({ where: { id: Number(id) } });
-    if (!existing) {
-      res.status(404).json({ error: 'RFP not found' });
-    }
-
-    const updated = await prisma.rfp.update({
+    const existing = await prisma.rfp.findUnique({
       where: { id: Number(id) },
-      data: patchData,
       include: {
         LocationType: true,
         generalInfo: true,
@@ -292,13 +305,246 @@ export const patchRfp =async (req: Request, res: Response): Promise<void> => {
       },
     });
 
-     res.status(200).json(updated);
+    if (!existing) {
+      res.status(404).json({ error: 'RFP not found' });
+      return;
+    }
 
+    // Prepare update object with optional nested updates
+    const updateData: any = {};
+
+    // Top-level fields
+    if (patchData.BasicInformation?.typeOfRfp) {
+      updateData.typeOfRfp = patchData.BasicInformation.typeOfRfp;
+    }
+    if (patchData.BasicInformation?.rfpReference) {
+      updateData.RfpReference = patchData.BasicInformation.rfpReference;
+    }
+
+    // Example: GeneralInfo partial update
+    if (patchData.GeneralInfo) {
+      updateData.generalInfo = {
+        update: patchData.GeneralInfo,
+      };
+    }
+
+    // Example: Location partial update
+    if (patchData.MonitoringDetails?.location) {
+      updateData.location = {
+        update: patchData.MonitoringDetails.location,
+      };
+    }
+
+    // Repeat for other nested relations as needed:
+    if (patchData.LocationMeasurement?.approvalDetails) {
+      updateData.panelMeetingDate = patchData.LocationMeasurement.approvalDetails.panelAppealMeeting;
+      updateData.panelDecisionDate = patchData.LocationMeasurement.approvalDetails.panelAppealDecisionDate;
+    }
+
+    if (patchData.MonitoringDetails?.locationType) {
+      updateData.LocationType = {
+        update: patchData.MonitoringDetails.locationType,
+      };
+    }
+
+    if (patchData.FlowmeterDetails?.flowMonitoring?.selectedOption) {
+      updateData.flowMeasurement = {
+        update: { selectedOption: patchData.FlowmeterDetails.flowMonitoring.selectedOption },
+      };
+    }
+
+    if (patchData.DataCollectionExchange?.data) {
+      updateData.data = {
+        update: patchData.DataCollectionExchange.data,
+      };
+    }
+
+    if (patchData.DataCollectionExchange?.maf) {
+      updateData.maf = {
+        update: patchData.DataCollectionExchange.maf,
+      };
+    }
+
+    // Finally, apply the update
+    const updatedRfp = await prisma.rfp.update({
+      where: { id: Number(id) },
+      data: updateData,
+      include: {
+        LocationType: true,
+        generalInfo: true,
+        location: true,
+        flowMeasurement: true,
+        flowRegister: { include: { inventory: true, installation: true, maintenance: true } },
+        data: true,
+        maf: true,
+        attachments: true,
+      },
+    });
+
+    res.status(200).json(updatedRfp);
   } catch (err: any) {
     console.error('❌ patchRfp error:', err);
-   res.status(500).json({ error: err.message || 'Internal server error' });
+    res.status(500).json({ error: err.message || 'Internal server error' });
   }
 };
+
+
+// export const patchRfp =async (req: Request, res: Response): Promise<void> => {
+//   try {
+//     const { id } = req.params;
+//     const patchData = req.body;
+
+//     const existing = await prisma.rfp.findUnique({ where: { id: Number(id) } });
+//     if (!existing) {
+//       res.status(404).json({ error: 'RFP not found' });
+//     }
+
+//     const updated = await prisma.rfp.update({
+//       where: { id: Number(id) },
+//       data: patchData,
+//       include: {
+//         LocationType: true,
+//         generalInfo: true,
+//         location: true,
+//         flowMeasurement: true,
+//         flowRegister: { include: { inventory: true, installation: true, maintenance: true } },
+//         data: true,
+//         maf: true,
+//         attachments: true,
+//       },
+//     });
+
+//      res.status(200).json(updated);
+
+//   } catch (err: any) {
+//     console.error('❌ patchRfp error:', err);
+//    res.status(500).json({ error: err.message || 'Internal server error' });
+//   }
+// };
+// export const updateFullRfp = async (req: Request, res: Response): Promise<void> => {
+//   try {
+//     const { id } = req.params;
+//     const rfpId = Number(id);
+
+//     // Find existing RFP to ensure it exists
+//     const existing = await prisma.rfp.findUnique({
+//       where: { id: rfpId },
+//       include: {
+//         LocationType: true,
+//         generalInfo: true,
+//         location: true,
+//         flowMeasurement: true,
+//         flowRegister: { include: { inventory: true, installation: true, maintenance: true } },
+//         data: true,
+//         maf: true,
+//         attachments: true,
+//       },
+//     });
+
+//     if (!existing) {
+//       res.status(404).json({ error: 'RFP not found' });
+//       return;
+//     }
+
+//     const {
+//       BasicInformation,
+//       GeneralInfo,
+//       LocationMeasurement,
+//       MonitoringDetails,
+//       FlowmeterDetails,
+//       DataCollectionExchange,
+//     } = req.body;
+
+//     const { typeOfRfp, rfpReference } = BasicInformation || {};
+
+//     if (!typeOfRfp || !rfpReference?.trim()) {
+//       res.status(400).json({ error: 'typeOfRfp and rfpReference are required.' });
+//       return;
+//     }
+
+//     // Update the RFP itself and nested relations
+//     const updatedRfp = await prisma.rfp.update({
+//       where: { id: rfpId },
+//       data: {
+//         typeOfRfp,
+//         RfpReference: rfpReference,
+//         startDate: DataCollectionExchange.startDate,
+//         completionDate: DataCollectionExchange.completionDate,
+//         panelMeetingDate: LocationMeasurement?.approvalDetails?.panelAppealMeeting,
+//         panelDecisionDate: LocationMeasurement?.approvalDetails?.panelAppealDecisionDate,
+
+//         LocationType: {
+//           update: {
+//             type: MonitoringDetails?.locationType?.type || existing.LocationType?.type || '',
+//           },
+//         },
+
+//         generalInfo: {
+//           update: {
+//             licensee: GeneralInfo.licensee || existing.generalInfo?.licensee || '',
+//             address: GeneralInfo.address || existing.generalInfo?.address || '',
+//             contactNumber: GeneralInfo.contactNumber || existing.generalInfo?.contactNumber || '',
+//             faxNumber: GeneralInfo.faxNumber || existing.generalInfo?.faxNumber || '',
+//             reportDate: GeneralInfo.reportDate || existing.generalInfo?.reportDate || '',
+//             reportRef: GeneralInfo.reportRef || existing.generalInfo?.reportRef || '',
+//             responsiblePosition: GeneralInfo.responsiblePosition || existing.generalInfo?.responsiblePosition || '',
+//             responsibleDepartment: GeneralInfo.responsibleDepartment || existing.generalInfo?.responsibleDepartment || '',
+//             fmIdScada: GeneralInfo.fmIdScada || existing.generalInfo?.fmIdScada || '',
+//             fmIdSwsAssetNo: GeneralInfo.fmIdSwsAssetNo || existing.generalInfo?.fmIdSwsAssetNo || '',
+//             siteManagerName: GeneralInfo.siteManagerName || existing.generalInfo?.siteManagerName || '',
+//           },
+//         },
+
+//         location: {
+//           update: {
+//             region: MonitoringDetails.location.region || existing.location?.region || '',
+//             stpcc: MonitoringDetails.location.stpcc || existing.location?.stpcc || '',
+//             description: MonitoringDetails.location.description || existing.location?.description || '',
+//             coordinateN: Number(MonitoringDetails.location.coordinateN) || existing.location?.coordinateN || 0,
+//             coordinateE: Number(MonitoringDetails.location.coordinateE) || existing.location?.coordinateE || 0,
+//             siteDrawingRef: MonitoringDetails.location.siteDrawingRef || existing.location?.siteDrawingRef || '',
+//             flowDiagramRef: MonitoringDetails.location.flowDiagramRef || existing.location?.flowDiagramRef || '',
+//           },
+//         },
+
+//         flowMeasurement: {
+//           update: {
+//             selectedOption: FlowmeterDetails?.flowMonitoring?.selectedOption || existing.flowMeasurement?.selectedOption || '',
+//           },
+//         },
+
+//         data: {
+//           update: DataCollectionExchange.data,
+//         },
+
+//         maf: {
+//           update: DataCollectionExchange.maf,
+//         },
+//       },
+//       include: {
+//         LocationType: true,
+//         generalInfo: true,
+//         location: true,
+//         flowMeasurement: true,
+//         flowRegister: {
+//           include: {
+//             inventory: true,
+//             installation: true,
+//             maintenance: true,
+//           },
+//         },
+//         data: true,
+//         maf: true,
+//         attachments: true,
+//       },
+//     });
+
+//     res.status(200).json(updatedRfp);
+//   } catch (err: any) {
+//     console.error('❌ updateFullRfp error:', err);
+//     res.status(500).json({ error: err.message || 'Internal server error' });
+//   }
+// };
 
 export const getFilteredRfps = async (req: Request, res: Response): Promise<void> => {
   try {
