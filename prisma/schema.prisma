@@ -29,6 +29,8 @@ model User {
   password  String
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  updatedAttachments  FlowMeterAttachment[] @relation("Updater")  // user edits
+
   groupId         Int
   group           Group     @relation(fields: [groupId], references: [id])
   flowMeterAttachments FlowMeterAttachment[]
@@ -199,7 +201,7 @@ model FlowMeterAttachment {
   filePath   String
   filename_disk     String?
   filename_download String?
-  folderId         Int?     // New field
+  folderId          String?  @default(uuid())
   folderPath       String?  // (Optional) computed value like 'uploads/folderId/filename'
   uploadedAt DateTime @default(now())
   createdAt  DateTime @default(now())
@@ -216,6 +218,8 @@ model FlowMeterAttachment {
 
 
 
+  updatedBy         User?    @relation("Updater", fields: [updatedById], references: [id])
+  updatedById       String?  // NEW field for tracking who updated
 
   uploaderId       String?  // new
   uploader         User?    @relation(fields: [uploaderId], references: [id])

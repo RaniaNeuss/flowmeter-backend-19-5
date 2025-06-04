@@ -6,9 +6,11 @@ import {
   getFilteredRfps,
   getFullRfps,
   getRfpById,
-  patchRfp, 
+  patchRfp, updateFile, deleteFile,
   deleteRfp,uploadFile
 } from '../controllers/rfpController';
+
+
 import { authenticateUser } from '../lib/authMiddleware';
 import multer from 'multer';
 const router = Router();
@@ -17,6 +19,9 @@ router.post('/create',  createFullRfp);
 
 // Get all RFPs
 router.get('/full',  getFullRfps);
+
+router.patch('/attachment/:id', authenticateUser, updateFile);
+router.delete('/attachment/:id', authenticateUser, deleteFile);
 
 // Get RFP by ID
 router.get('/:id', authenticateUser, getRfpById);

@@ -390,23 +390,53 @@ export const logout = (req: Request, res: Response): void => {
 
 
 // Controller: Get all Users
-export const getUsers = async (req: Request, res: Response): Promise<void> => {
-    try {
+// export const getUsers = async (req: Request, res: Response): Promise<void> => {
+//     try {
     
 
-        // Retrieve userId from session
-         const userId = req.userId;       
-          console.log('userId:', userId);
+//         // Retrieve userId from session
+//          const userId = req.userId;       
+//           console.log('userId:', userId);
 
-        const users = await prisma.user.findMany({
-            include: { group: true },
-        });
-         console.info("Fetched all users successfully");
-        res.status(200).json(users);
-    } catch (err: any) {
-        console.error("api get users: " + err.message);
-        handleError(res, err, "api get users");
-    }
+//         const users = await prisma.user.findMany({
+//             include: { group: true },
+//         });
+//          console.info("Fetched all users successfully");
+//         res.status(200).json(users);
+//     } catch (err: any) {
+//         console.error("api get users: " + err.message);
+//         handleError(res, err, "api get users");
+//     }
+// };
+export const getUsers = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const users = await prisma.user.findMany({
+      select: {
+        id: true,
+        username: true,
+        name: true,
+        email: true,
+        info: true,
+        status: true,
+        loginAttempts: true,
+        createdAt: true,
+        updatedAt: true,
+       
+        group: {
+          select: {
+            id: true,
+            name: true
+          }
+        }
+      }
+    });
+
+    console.info("Fetched all users successfully");
+    res.status(200).json(users);
+  } catch (err: any) {
+    console.error("API get users error:", err.message);
+    res.status(500).json({ error: "Failed to fetch users", details: err.message });
+  }
 };
 
 // Controller: Get User by ID

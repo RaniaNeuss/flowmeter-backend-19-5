@@ -63,7 +63,7 @@ export const uploadFile = async (req: Request, res: Response): Promise<void> => 
         id,  // UUID
         rfpId: Number(rfpid),
         uploaderId,
-        folderId: folderId ? parseInt(folderId, 10) : null,
+        folderId: folderId ? String(folderId) : null,
         type,
         filePath: folderPath,
         filename_disk: filenameDisk,
@@ -430,6 +430,72 @@ export const patchRfp = async (req: Request, res: Response): Promise<void> => {
     res.status(500).json({ error: err.message || 'Internal server error' });
   }
 };
+
+
+export const updateFile = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const {
+      filename_download,
+      title,
+      description,
+      location,
+      tags,
+      width,
+      height,
+      duration
+    } = req.body;
+
+    const updatedById = req.userId; // From the authentication middleware
+
+    const updatedAttachment = await prisma.flowMeterAttachment.update({
+      where: { id },
+      data: {
+        filename_download: filename_download || undefined,
+        title: title || undefined,
+        description: description || undefined,
+        location: location || undefined,
+        tags: tags || undefined,
+        width: width ? parseInt(width, 10) : undefined,
+        height: height ? parseInt(height, 10) : undefined,
+        duration: duration ? parseFloat(duration) : undefined,
+        updatedById
+      }
+    });
+
+    res.status(200).json({
+      message: 'File updated successfully.',
+      attachment: updatedAttachment
+    });
+  } catch (err: any) {
+    console.error('❌ Update file error:', err);
+    res.status(500).json({ error: 'Failed to update file.', details: err.message });
+  }
+};
+
+export const deleteFile = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const deletedById = req.userId; // From the auth middleware
+
+    // Update the record first to track who deleted it
+    await prisma.flowMeterAttachment.update({
+      where: { id },
+      data: { updatedById: deletedById }
+    });
+
+    // Delete the file record
+    await prisma.flowMeterAttachment.delete({
+      where: { id }
+    });
+
+    res.status(200).json({ message: 'File deleted successfully.' });
+  } catch (err: any) {
+    console.error('❌ Delete file error:', err);
+    res.status(500).json({ error: 'Failed to delete file.', details: err.message });
+  }
+};
+
 
 
 
