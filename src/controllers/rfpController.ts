@@ -30,8 +30,8 @@ export const uploadFile = async (req: Request, res: Response): Promise<void> => 
     // Get uploader ID from auth middleware
     const uploaderId = req.userId || null;
 
-    if (!file || !rfpid) {
-      res.status(400).json({ error: 'File and rfpId are required.' });
+    if (!file ) {
+      res.status(400).json({ error: 'File is required.' });
       return;
     }
 
@@ -60,7 +60,7 @@ export const uploadFile = async (req: Request, res: Response): Promise<void> => 
     const attachment = await prisma.flowMeterAttachment.create({
       data: {
         id,  // UUID
-        rfpId: Number(rfpid),
+        rfpId: Number(rfpid)|| null,
         uploaderId,
         folderId: folderId ? String(folderId) : null,
         type,

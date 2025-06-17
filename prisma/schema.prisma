@@ -200,7 +200,7 @@ model MAF {
 
 model FlowMeterAttachment {
   id                String   @id @default(uuid())
-  rfpId      Int
+  rfpId      Int?
   type       String
   filePath   String
   filename_disk     String?
@@ -227,7 +227,7 @@ model FlowMeterAttachment {
 
   uploaderId       String?  // new
   uploader         User?    @relation(fields: [uploaderId], references: [id])
-  rfp Rfp @relation(fields: [rfpId], references: [id])
+  rfp Rfp? @relation(fields: [rfpId], references: [id])
 }
 
 
