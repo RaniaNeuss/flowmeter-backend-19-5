@@ -16,7 +16,7 @@ enum UserStatus {
 }
 model User {
   id        String   @id @default(uuid())
-  username  String   @unique
+  username  String
   name      String?
   email     String   @unique
   info      String?
@@ -34,6 +34,8 @@ model User {
   groupId         Int
   group           Group     @relation(fields: [groupId], references: [id])
   flowMeterAttachments FlowMeterAttachment[]
+  permissions Permission[] @relation("UserPermissions")
+
 
 }
 
@@ -48,6 +50,8 @@ model Permission {
   id        String   @id @default(uuid())
   action    String   @unique
   groups    Group[]  @relation("GroupPermissions")
+  users   User[]   @relation("UserPermissions")
+
 }
 
 model Rfp {

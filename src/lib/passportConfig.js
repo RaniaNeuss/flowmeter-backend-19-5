@@ -41,8 +41,8 @@ passport.use(
           return done(null, false, {
             message:
               newStatus === "suspended"
-                ? "Account suspended after 5 failed attempts"
-                : "Incorrect password",
+                ? "Your account has been suspended due to multiple failed login attempts"
+                : "Invalid credentials",
           });
         }
 

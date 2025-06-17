@@ -7,7 +7,6 @@ import fs from 'fs/promises';
 import path from 'path'; // To get the file extension easily
 import { v4 as uuidv4 } from 'uuid';
 
-
 export const uploadFile = async (req: Request, res: Response): Promise<void> => {
   try {
     console.log("📥 Upload request received.");
@@ -100,53 +99,63 @@ export const createFullRfp = async (req: Request, res: Response): Promise<void> 
       LocationMeasurement,
       MonitoringDetails,
       FlowmeterDetails,
+      FlowmeterInventory,
+      FlowmeterInstallationMaintenance,
       DataCollectionExchange,
+      maf,
+      attachments,
     } = req.body;
 
     const { typeOfRfp, rfpReference } = BasicInformation || {};
-
     if (!typeOfRfp || !rfpReference?.trim()) {
-      res.status(400).json({ error: 'typeOfRfp and rfpReference are required.' });
-      return;
+      return void res.status(400).json({ error: 'typeOfRfp and rfpReference are required.' });
     }
 
     const duplicate = await prisma.rfp.findUnique({ where: { RfpReference: rfpReference } });
     if (duplicate) {
-      res.status(409).json({ error: `Duplicate RfpReference: ${rfpReference}` });
-      return;
+      return void res.status(409).json({ error: `Duplicate RfpReference: ${rfpReference}` });
     }
 
     const g = GeneralInfo;
     const l = MonitoringDetails?.location;
     const fm = FlowmeterDetails?.flowMonitoring;
+    const inv = FlowmeterInventory?.inventory;
+    const inst = FlowmeterInstallationMaintenance?.installation;
+    const maint = FlowmeterInstallationMaintenance?.maintenance;
     const dce = DataCollectionExchange;
 
     if (!g?.licensee || !g.address || !g.contactNumber || !g.reportDate || !g.reportRef ||
         !g.responsiblePosition || !g.responsibleDepartment || !g.fmIdScada || !g.fmIdSwsAssetNo) {
-      res.status(400).json({ error: 'All GeneralInfo fields are required.' });
-      return;
+      return void res.status(400).json({ error: 'All GeneralInfo fields are required.' });
     }
 
     if (!l?.description || l.coordinateN === undefined || l.coordinateE === undefined ||
         !l.region || !l.stpcc || !l.siteDrawingRef || !l.flowDiagramRef) {
-      res.status(400).json({ error: 'All Location fields are required.' });
-      return;
+      return void res.status(400).json({ error: 'All Location fields are required.' });
     }
 
-    if (!fm?.inventory || !fm.installation || !fm.maintenance || !fm.selectedOption) {
-      res.status(400).json({ error: 'All FlowMonitoring fields are required.' });
-      return;
+    if (!fm?.flowDiagramRef || !fm.selectedOption) {
+      return void res.status(400).json({ error: 'All FlowMonitoring fields are required.' });
     }
 
-    if (!dce?.startDate || !dce.completionDate || !dce.data || !dce.maf || !dce.attachments?.length) {
-      res.status(400).json({ error: 'All DataCollectionExchange fields are required.' });
-      return;
+    if (!inv || !inst || !maint) {
+      return void res.status(400).json({ error: 'Flowmeter inventory, installation, and maintenance are required.' });
+    }
+
+    if (!dce?.startDate || !dce.completionDate || !dce.data) {
+      return void res.status(400).json({ error: 'All DataCollectionExchange fields are required.' });
     }
 
     const [inventory, installation, maintenance] = await Promise.all([
-      prisma.inventory.create({ data: fm.inventory }),
-      prisma.installation.create({ data: fm.installation }),
-      prisma.maintenance.create({ data: fm.maintenance }),
+      prisma.inventory.create({ data: inv }),
+      prisma.installation.create({
+        data: {
+          ...inst,
+          meterInstallDate: fm.meterInstallDate || null,
+          meterRemovalDate: fm.meterRemovalDate || null,
+        },
+      }),
+      prisma.maintenance.create({ data: maint }),
     ]);
 
     const rfp = await prisma.rfp.create({
@@ -159,7 +168,7 @@ export const createFullRfp = async (req: Request, res: Response): Promise<void> 
         panelDecisionDate: LocationMeasurement?.approvalDetails?.panelAppealDecisionDate,
 
         LocationType: {
-          create: { type: MonitoringDetails?.locationType?.type },
+          create: { type: g.locationType },
         },
 
         generalInfo: {
@@ -209,16 +218,17 @@ export const createFullRfp = async (req: Request, res: Response): Promise<void> 
         },
 
         maf: {
-          create: dce.maf,
+          create: maf,
         },
 
-        attachments: {
+attachments: {
           create: dce.attachments.map((att: any) => ({
             type: att.type,
             filePath: att.filePath,
             uploadedAt: new Date(att.uploadedAt),
           })),
         },
+
       },
       include: {
         LocationType: true,
@@ -238,11 +248,11 @@ export const createFullRfp = async (req: Request, res: Response): Promise<void> 
       },
     });
 
-    res.status(201).json(rfp);
+    console.log("✅ RFP created with ID:", rfp.id);
+    return void res.status(201).json(rfp);
   } catch (err: any) {
-    console.error('❌ createFullRfp error:', err);
-    res.status(500).json({ error: err.message || 'Internal server error' });
-    return;
+    console.error("❌ createFullRfp error:", err);
+    return void res.status(500).json({ error: err.message || "Internal server error" });
   }
 };
 

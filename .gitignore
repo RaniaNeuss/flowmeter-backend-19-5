@@ -4,3 +4,4 @@ dist
 prisma/dev.db
 
 
+prisma/schema.prisma
