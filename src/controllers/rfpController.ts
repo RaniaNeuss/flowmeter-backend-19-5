@@ -514,6 +514,37 @@ export const deleteFile = async (req: Request, res: Response): Promise<void> => 
     res.status(500).json({ error: 'Failed to delete file.', details: err.message });
   }
 };
+export const getFilesByRfpId = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { rfpId } = req.params;
+
+    if (!rfpId) {
+      res.status(400).json({ error: 'rfpId parameter is required.' });
+      return;
+    }
+
+    const attachments = await prisma.flowMeterAttachment.findMany({
+      where: { rfpId: Number(rfpId) },
+      orderBy: { uploadedAt: 'desc' }
+    });
+
+    if (!attachments || attachments.length === 0) {
+      res.status(404).json({ message: 'No attachments found for the given RFP ID.' });
+      return;
+    }
+
+    res.status(200).json({
+      message: 'Attachments fetched successfully.',
+      attachments
+    });
+    return;
+  } catch (err: any) {
+    console.error('❌ getFilesByRfpId error:', err);
+    res.status(500).json({ error: 'Failed to fetch attachments.', details: err.message });
+    return;
+  }
+};
+
 
 
 

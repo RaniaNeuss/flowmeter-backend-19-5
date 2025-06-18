@@ -7,12 +7,12 @@ import { authenticateUser } from "../lib/authMiddleware";
 import { authorizeRoles } from '../lib/authorizeRoles';
 const router = Router();
 // Create a new device
-router.post('/create',authenticateUser, createDevice); // POST /api/devices/create
+router.post('/create', createDevice); // POST /api/devices/create
 router.post("/testconnection", testWebAPIConnection);
 // Edit an existing device
- router.put('/:id',authenticateUser, editDevice); // PUT /api/devices/edit/:id
- router.get('/',authenticateUser, getAllDevices); 
- router.get('/:id',authenticateUser, getDeviceById); 
+ router.put('/:id', editDevice); // PUT /api/devices/edit/:id
+ router.get('/', getAllDevices); 
+ router.get('/:id', getDeviceById); 
  router.delete('/delete-many', deleteManyDevices); 
  router.delete('/remove-all', deleteAllDevices);
  router.delete('/:id',authenticateUser,authorizeRoles('SuperAdmin'), deleteDevice);
