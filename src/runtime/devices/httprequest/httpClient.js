@@ -37,7 +37,7 @@ function HTTPclient(_data, _logger, _events, _runtime, prisma, io) {
     if (!device || device.id !== deviceId) {
       device = await prisma.device.findUnique({
         where: { id: deviceId },
-        include: { tags: true },
+        
       });
       logger.info(`Fetched device: ${device ? device.name : 'NULL'}`);
       if (device?.tags) {
@@ -329,7 +329,7 @@ function HTTPclient(_data, _logger, _events, _runtime, prisma, io) {
     // Re-fetch device just once to get all tags for address->id mapping
     const dev = await prisma.device.findUnique({
       where: { id: deviceId },
-      include: { tags: true },
+     
     });
     if (!dev) {
       console.error(`Device '${deviceId}' not found in _updateVarsValue.`);

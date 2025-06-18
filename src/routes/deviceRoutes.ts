@@ -15,7 +15,7 @@ router.post("/testconnection", testWebAPIConnection);
  router.get('/:id', getDeviceById); 
  router.delete('/delete-many', deleteManyDevices); 
  router.delete('/remove-all', deleteAllDevices);
- router.delete('/:id',authenticateUser,authorizeRoles('SuperAdmin'), deleteDevice);
+ router.delete('/:id', deleteDevice);
 router.post('/odbc-connect', connectODBCAndFetchData);
 
 export default router;
