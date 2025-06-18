@@ -226,9 +226,9 @@ export const createFullRfp = async (req: Request, res: Response): Promise<void> 
           create: maf,
         },
 
-        attachments: {
-          connect: flatAttachmentIds.map((id: string) => ({ id })),
-        },
+        // attachments: {
+        //   connect: flatAttachmentIds.map((id: string) => ({ id })),
+        // },
       },
       include: {
         LocationType: true,
