@@ -282,3 +282,64 @@ export const connectODBCAndFetchData = async (req: Request, res: Response): Prom
     res.status(500).json({ error: "Connection failed. Check the DSN and query.", details: error.message });
   }
 };
+
+
+export const testDeviceConnection = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { type, property } = req.body;
+
+    if (!type || !property) {
+      res.status(400).json({ error: "Both 'type' and 'property' are required." });
+      return;
+    }
+
+    if (type === "WebAPI") {
+      const { address, method = "GET" } = property;
+
+      if (!address) {
+        res.status(400).json({ error: "API address is required for WebAPI devices." });
+        return;
+      }
+
+      try {
+        const response = await axios({ url: address, method });
+
+        if (response.status >= 200 && response.status < 300) {
+          console.log("✅ WebAPI connection successful!");
+          res.status(200).json({ message: "WebAPI connection successful." });
+        } else {
+          console.error("⚠ API responded with status:", response.status);
+          res.status(500).json({ error: `WebAPI responded with status ${response.status}` });
+        }
+      } catch (err) {
+        console.error("❌ WebAPI connection failed:", err);
+        res.status(500).json({ error: "WebAPI connection failed.", details: (err as Error).message });
+      }
+    } else if (type === "ODBC") {
+      const { dsn } = property;
+
+      if (!dsn) {
+        res.status(400).json({ error: "DSN is required for ODBC connection." });
+        return;
+      }
+
+      const connectionString = `DSN=${dsn};TrustServerCertificate=yes;`;
+
+      try {
+        const connection = await odbc.connect(connectionString.trim());
+        console.log("✅ ODBC connection successful!");
+        await connection.close();
+
+        res.status(200).json({ message: "ODBC connection successful." });
+      } catch (err: any) {
+        console.error("❌ ODBC connection failed:", err.message);
+        res.status(500).json({ error: "ODBC connection failed.", details: err.message });
+      }
+    } else {
+      res.status(400).json({ error: `Unsupported device type '${type}'. Use 'WebAPI' or 'ODBC'.` });
+    }
+  } catch (err: any) {
+    console.error("❌ testDeviceConnection error:", err);
+    res.status(500).json({ error: "Internal server error.", details: err.message });
+  }
+};
