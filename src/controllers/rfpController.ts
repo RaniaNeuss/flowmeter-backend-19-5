@@ -103,7 +103,7 @@ export const createFullRfp = async (req: Request, res: Response): Promise<void> 
       FlowmeterInstallationMaintenance,
       DataCollectionExchange,
       maf,
-      attachments,
+      attachments, // expects [{ FlowMeterImages: [...], CollaborationCertificate: "...", AnotherFile: [...] }]
     } = req.body;
 
     const { typeOfRfp, rfpReference } = BasicInformation || {};
@@ -145,6 +145,11 @@ export const createFullRfp = async (req: Request, res: Response): Promise<void> 
     if (!dce?.startDate || !dce.completionDate || !dce.data) {
       return void res.status(400).json({ error: 'All DataCollectionExchange fields are required.' });
     }
+
+    // Flatten attachments
+   const flatAttachmentIds: string[] = attachments?.[0]
+  ? (Object.values(attachments[0]).flat() as string[])
+  : [];
 
     const [inventory, installation, maintenance] = await Promise.all([
       prisma.inventory.create({ data: inv }),
@@ -221,14 +226,9 @@ export const createFullRfp = async (req: Request, res: Response): Promise<void> 
           create: maf,
         },
 
-attachments: {
-          create: dce.attachments.map((att: any) => ({
-            type: att.type,
-            filePath: att.filePath,
-            uploadedAt: new Date(att.uploadedAt),
-          })),
+        attachments: {
+          connect: flatAttachmentIds.map((id: string) => ({ id })),
         },
-
       },
       include: {
         LocationType: true,
@@ -248,6 +248,14 @@ attachments: {
       },
     });
 
+    // ✅ Update rfpId field in FlowMeterAttachment table
+    if (flatAttachmentIds.length > 0) {
+      await prisma.flowMeterAttachment.updateMany({
+        where: { id: { in: flatAttachmentIds } },
+        data: { rfpId: rfp.id },
+      });
+    }
+
     console.log("✅ RFP created with ID:", rfp.id);
     return void res.status(201).json(rfp);
   } catch (err: any) {
@@ -255,6 +263,7 @@ attachments: {
     return void res.status(500).json({ error: err.message || "Internal server error" });
   }
 };
+
 
 
 export const getFullRfps = async (req: Request, res: Response): Promise<void> => {
