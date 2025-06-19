@@ -97,7 +97,7 @@ model GeneralInfo {
   siteManagerName String? // Optional
   faxNumber       String? // Optional
 
-  rfp Rfp @relation(fields: [rfpId], references: [id])
+  rfp Rfp @relation(fields: [rfpId], references: [id], onDelete: Cascade)
 }
 
 model Location {
@@ -111,7 +111,7 @@ model Location {
   siteDrawingRef String
   flowDiagramRef String
 
-  rfp Rfp @relation(fields: [rfpId], references: [id])
+  rfp Rfp @relation(fields: [rfpId], references: [id], onDelete: Cascade)
 }
 
 model FlowMeasurement {
@@ -119,7 +119,7 @@ model FlowMeasurement {
   rfpId          Int     @unique
   selectedOption String?  // One of: "cumulativeFlow", "fifteenMinFlow", or "eventRecording"
 
-  rfp Rfp @relation(fields: [rfpId], references: [id])
+  rfp Rfp @relation(fields: [rfpId], references: [id], onDelete: Cascade)
 }
 
 model FlowMonitoringRegister {
@@ -129,10 +129,10 @@ model FlowMonitoringRegister {
   installationId Int
   maintenanceId  Int
 
-  rfp          Rfp          @relation(fields: [rfpId], references: [id])
-  inventory    Inventory    @relation(fields: [inventoryId], references: [id])
-  installation Installation @relation(fields: [installationId], references: [id])
-  maintenance  Maintenance  @relation(fields: [maintenanceId], references: [id])
+  rfp          Rfp          @relation(fields: [rfpId], references: [id], onDelete: Cascade)
+  inventory    Inventory    @relation(fields: [inventoryId], references: [id], onDelete: Cascade)
+  installation Installation @relation(fields: [installationId], references: [id], onDelete: Cascade)
+  maintenance  Maintenance  @relation(fields: [maintenanceId], references: [id], onDelete: Cascade)
 }
 
 model Inventory {
@@ -185,7 +185,7 @@ model Data {
   ubValue                 String
   dataManagementProcedure String
 
-  rfp Rfp @relation(fields: [rfpId], references: [id])
+  rfp Rfp @relation(fields: [rfpId], references: [id], onDelete: Cascade)
 }
 
 model MAF {
@@ -195,7 +195,7 @@ model MAF {
   sopRef           String
   selectionSummary String
 
-  rfp Rfp @relation(fields: [rfpId], references: [id])
+  rfp Rfp @relation(fields: [rfpId], references: [id], onDelete: Cascade)
 }
 
 model FlowMeterAttachment {
@@ -227,7 +227,7 @@ model FlowMeterAttachment {
 
   uploaderId       String?  // new
   uploader         User?    @relation(fields: [uploaderId], references: [id])
-  rfp Rfp? @relation(fields: [rfpId], references: [id])
+  rfp Rfp? @relation(fields: [rfpId], references: [id], onDelete: Cascade)
 }
 
 

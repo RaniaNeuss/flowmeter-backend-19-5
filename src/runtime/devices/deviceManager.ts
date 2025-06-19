@@ -153,7 +153,7 @@ const writeDataToInflux = async (data: any[]) => {
     await writeApi.flush();
     console.log("✅ Data successfully written to InfluxDB.");
   } catch (error) {
-    console.error("❌ Error writing data to InfluxDB:", error);
+    // console.error("❌ Error writing data to InfluxDB:", error);
   }
 };
 

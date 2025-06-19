@@ -23,6 +23,8 @@ app.use(
 );
 app.use(express.json({ limit: '100mb' }));
 app.use(express.urlencoded({ limit: '100mb', extended: true }));
+app.use(cookieParser()); // Parse cookies
+
 app.use(
   session({
     secret: process.env.SESSION_SECRET || 'secret',
@@ -33,9 +35,9 @@ app.use(
     },
   })
 );
+
 app.use(passport.initialize());
 app.use(passport.session());
-app.use(cookieParser()); // Parse cookies
 
 // Routes
 app.use('/api/users', userRoutes);
