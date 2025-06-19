@@ -41,30 +41,18 @@ async function main() {
   "devices:canCreate",
   "devices:canUpdate",
   "devices:canDelete",
-  "devices:canViewSingleDevice",
-  "devices:canTestConnection",
-  "devices:canDeleteMultiple",
-  "devices:canDeleteAll",
 
   "users:canView",
   "users:canCreate",
   "users:canUpdate",
   "users:canDelete",
-  "users:canRegister",
-  "users:canRefreshToken",
-  "users:canLogin",
-  "users:canLogout",
-  "users:canEditProfile",
-  "users:canManageRoles",
-  "users:canViewGroups",
+
 
   "rfps:canCreate",
-  "rfps:canViewAll",
-  "rfps:canViewSingle",
+  "rfps:canView",
   "rfps:canUpdate",
   "rfps:canDelete",
-  "rfps:canPatch",
-  "rfps:canFilter",
+
 ];
 
 
