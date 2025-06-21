@@ -64,6 +64,7 @@ export const uploadFile = async (req: Request, res: Response): Promise<void> => 
         uploaderId,
         folderId: folderId ? String(folderId) : null,
         type,
+        typeOfAttachment: 'AnotherFile', // Default type, can be changed later
         filePath: folderPath,
         filename_disk: filenameDisk,
         filename_download: filename_download || file.originalname,
@@ -297,7 +298,13 @@ export const getRfpById = async (req: Request, res: Response): Promise<void> => 
         generalInfo: true,
         location: true,
         flowMeasurement: true,
-        flowRegister: { include: { inventory: true, installation: true, maintenance: true } },
+        flowRegister: {
+          include: {
+            inventory: true,
+            installation: true,
+            maintenance: true,
+          },
+        },
         data: true,
         maf: true,
         attachments: true,
@@ -305,16 +312,43 @@ export const getRfpById = async (req: Request, res: Response): Promise<void> => 
     });
 
     if (!rfp) {
-     res.status(404).json({ error: 'RFP not found' });
+      res.status(404).json({ error: 'RFP not found' });
+      return;
     }
 
-    res.status(200).json(rfp);
+    const {
+      generalInfo,
+      location,
+      flowMeasurement,
+      flowRegister,
+      data,
+      maf,
+      LocationType,
+      attachments,
+      ...basic
+    } = rfp;
 
+    const flattened = {
+      ...basic, // includes id, RfpReference, typeOfRfp, dates
+      ...generalInfo,
+      ...location,
+      ...flowMeasurement,
+      ...flowRegister?.inventory,
+      ...flowRegister?.installation,
+      ...flowRegister?.maintenance,
+      ...data,
+      ...maf,
+      locationType: LocationType?.type ?? null,
+      attachments: attachments ?? [],
+    };
+
+    res.status(200).json(flattened);
   } catch (err: any) {
     console.error('❌ getRfpById error:', err);
     res.status(500).json({ error: err.message || 'Internal server error' });
   }
 };
+
 
 export const deleteRfp = async (req: Request, res: Response): Promise<void> => {
   try {
@@ -514,6 +548,37 @@ export const deleteFile = async (req: Request, res: Response): Promise<void> => 
     res.status(500).json({ error: 'Failed to delete file.', details: err.message });
   }
 };
+// export const getFilesByRfpId = async (req: Request, res: Response): Promise<void> => {
+//   try {
+//     const { rfpId } = req.params;
+
+//     if (!rfpId) {
+//       res.status(400).json({ error: 'rfpId parameter is required.' });
+//       return;
+//     }
+
+//     const attachments = await prisma.flowMeterAttachment.findMany({
+//       where: { rfpId: Number(rfpId) },
+//       orderBy: { uploadedAt: 'desc' }
+//     });
+
+//     if (!attachments || attachments.length === 0) {
+//       res.status(404).json({ message: 'No attachments found for the given RFP ID.' });
+//       return;
+//     }
+
+//     res.status(200).json({
+//       message: 'Attachments fetched successfully.',
+//       attachments
+//     });
+//     return;
+//   } catch (err: any) {
+//     console.error('❌ getFilesByRfpId error:', err);
+//     res.status(500).json({ error: 'Failed to fetch attachments.', details: err.message });
+//     return;
+//   }
+// };
+
 export const getFilesByRfpId = async (req: Request, res: Response): Promise<void> => {
   try {
     const { rfpId } = req.params;
@@ -525,26 +590,30 @@ export const getFilesByRfpId = async (req: Request, res: Response): Promise<void
 
     const attachments = await prisma.flowMeterAttachment.findMany({
       where: { rfpId: Number(rfpId) },
-      orderBy: { uploadedAt: 'desc' }
+      orderBy: { uploadedAt: 'desc' },
     });
 
-    if (!attachments || attachments.length === 0) {
-      res.status(404).json({ message: 'No attachments found for the given RFP ID.' });
-      return;
-    }
+    const grouped = {
+      CollaborationCertificate: attachments
+        .filter((a) => a.typeOfAttachment === 'CollaborationCertificate')
+        .map((a) => a.id),
+      AnotherFile: attachments
+        .filter((a) => a.typeOfAttachment === 'AnotherFile')
+        .map((a) => a.id),
+      FlowMeterImages: attachments
+        .filter((a) => a.typeOfAttachment === 'FlowMeterImages')
+        .map((a) => a.id),
+    };
 
     res.status(200).json({
-      message: 'Attachments fetched successfully.',
-      attachments
+      message: 'Attachments grouped by typeOfAttachment.',
+      attachments: grouped,
     });
-    return;
   } catch (err: any) {
     console.error('❌ getFilesByRfpId error:', err);
     res.status(500).json({ error: 'Failed to fetch attachments.', details: err.message });
-    return;
   }
 };
-
 
 
 

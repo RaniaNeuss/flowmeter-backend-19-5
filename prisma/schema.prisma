@@ -202,6 +202,7 @@ model FlowMeterAttachment {
   id                String   @id @default(uuid())
   rfpId      Int?
   type       String
+  typeOfAttachment    String?
   filePath   String
   filename_disk     String?
   filename_download String?
