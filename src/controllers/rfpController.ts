@@ -298,13 +298,7 @@ export const getRfpById = async (req: Request, res: Response): Promise<void> => 
         generalInfo: true,
         location: true,
         flowMeasurement: true,
-        flowRegister: {
-          include: {
-            inventory: true,
-            installation: true,
-            maintenance: true,
-          },
-        },
+        flowRegister: { include: { inventory: true, installation: true, maintenance: true } },
         data: true,
         maf: true,
         attachments: true,
@@ -312,37 +306,11 @@ export const getRfpById = async (req: Request, res: Response): Promise<void> => 
     });
 
     if (!rfp) {
-      res.status(404).json({ error: 'RFP not found' });
-      return;
+     res.status(404).json({ error: 'RFP not found' });
     }
 
-    const {
-      generalInfo,
-      location,
-      flowMeasurement,
-      flowRegister,
-      data,
-      maf,
-      LocationType,
-      attachments,
-      ...basic
-    } = rfp;
+    res.status(200).json(rfp);
 
-    const flattened = {
-      ...basic, // includes id, RfpReference, typeOfRfp, dates
-      ...generalInfo,
-      ...location,
-      ...flowMeasurement,
-      ...flowRegister?.inventory,
-      ...flowRegister?.installation,
-      ...flowRegister?.maintenance,
-      ...data,
-      ...maf,
-      locationType: LocationType?.type ?? null,
-      attachments: attachments ?? [],
-    };
-
-    res.status(200).json(flattened);
   } catch (err: any) {
     console.error('❌ getRfpById error:', err);
     res.status(500).json({ error: err.message || 'Internal server error' });
