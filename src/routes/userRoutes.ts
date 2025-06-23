@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { getUsers,refreshtoken,sendOtpToUser, verifyOtp,editUser,forgotPassword, resetPassword ,assignPermissionsToRole,getMyProfile, Register,createUser, deleteUser, getGroups, createGroup, deleteGroup, getUser, login , authStatus ,logout,editProfile } from '../controllers/userController';
+import { getUsers,refreshtoken,sendOtpToUser,  getUserPreferences,  saveUserPreferences,verifyOtp,editUser,forgotPassword, resetPassword ,assignPermissionsToRole,getMyProfile, Register,createUser, deleteUser, getGroups, createGroup, deleteGroup, getUser, login , authStatus ,logout,editProfile } from '../controllers/userController';
 import passport from "passport";
 import jwt from "jsonwebtoken";
 import { JWT_SECRET, REFRESH_SECRET } from "../lib/config";
@@ -55,7 +55,17 @@ router.post('/assign-permissions', authenticateUser, authorizeRoles('SuperAdmin'
 router.get('/:id', authenticateUser, getUser); // Dynamic route
 router.put('/:id', authenticateUser, authorizeRoles('SuperAdmin'), editUser); // Admin only
 router.delete('/:id', authenticateUser, authorizeRoles('SuperAdmin'), authorizePermissions(['users:canDelete']), deleteUser);
+router.post(
+  '/preferences',
+authenticateUser,
+  saveUserPreferences
+);
 
+router.get(
+  '/preferences',
+
+  getUserPreferences
+);
 router.post("/register", Register);
 
 /** ===========================

@@ -99,8 +99,10 @@ export const createFullRfp = async (req: Request, res: Response): Promise<void> 
       GeneralInfo,
       LocationMeasurement,
       MonitoringDetails,
+      approvalDetails,
       FlowmeterDetails,
       FlowmeterInventory,
+      
       FlowmeterInstallationMaintenance,
       DataCollectionExchange,
       maf,
@@ -176,7 +178,19 @@ export const createFullRfp = async (req: Request, res: Response): Promise<void> 
         LocationType: {
           create: { type: g.locationType },
         },
-
+        approvalDetails: {
+  create: {
+    approvalExpiry: LocationMeasurement.approvalDetails.approvalExpiry,
+    approvedReapplication: LocationMeasurement.approvalDetails.approvedReapplication,
+    appealApplication: LocationMeasurement.approvalDetails.appealApplication,
+    appealExtensionApplication: LocationMeasurement.approvalDetails.appealExtensionApplication,
+    appealExtensionDecision: LocationMeasurement.approvalDetails.appealExtensionDecision,
+    panelAppealMeeting: LocationMeasurement.approvalDetails.panelAppealMeeting,
+    panelAppealDecisionDate: LocationMeasurement.approvalDetails.panelAppealDecisionDate,
+    doeAppealDecisionDate: LocationMeasurement.approvalDetails.doeAppealDecisionDate,
+    panelAppealFinalResult: LocationMeasurement.approvalDetails.panelAppealFinalResult,
+  },
+},
         generalInfo: {
           create: {
             licensee: g.licensee,
@@ -250,28 +264,12 @@ export const createFullRfp = async (req: Request, res: Response): Promise<void> 
     });
 
     // ✅ Update rfpId field in FlowMeterAttachment table
-   if (attachments?.length > 0) {
-  const attachmentObj = attachments[0];
-  const updateOps: Promise<any>[] = [];
-
-  for (const [typeOfAttachment, ids] of Object.entries(attachmentObj)) {
-    const attachmentIds = Array.isArray(ids) ? ids : [ids];
-    for (const id of attachmentIds) {
-      updateOps.push(
-        prisma.flowMeterAttachment.update({
-          where: { id: id as string },
-          data: {
-            rfpId: rfp.id,
-            typeOfAttachment,
-          },
-        })
-      );
+    if (flatAttachmentIds.length > 0) {
+      await prisma.flowMeterAttachment.updateMany({
+        where: { id: { in: flatAttachmentIds } },
+        data: { rfpId: rfp.id },
+      });
     }
-  }
-
-  await Promise.all(updateOps);
-}
-
 
     console.log("✅ RFP created with ID:", rfp.id);
     return void res.status(201).json(rfp);
@@ -356,6 +354,7 @@ export const getRfpById = async (req: Request, res: Response): Promise<void> => 
         },
         data: true,
         maf: true,
+        approvalDetails: true, // ✅ add this
         attachments: {
           select: {
             id: true,

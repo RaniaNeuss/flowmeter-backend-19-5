@@ -1217,10 +1217,95 @@ export const resetPassword = async (req: Request, res: Response): Promise<void> 
 };
 
 
+export const saveUserPreferences = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const userId = req.userId;
+
+    if (!userId) {
+      res.status(401).json({ error: "unauthorized", message: "User is not logged in" });
+      return;
+    }
+
+    const { tableName, preferences } = req.body;
+
+    if (!tableName || typeof preferences !== "object") {
+      res.status(400).json({
+        error: "validation_error",
+        message: "tableName and preferences (as JSON object) are required",
+      });
+      return;
+    }
+
+    const updated = await prisma.userPreference.upsert({
+      where: {
+        userId_tableName: { userId: userId, tableName }, // assumes composite unique
+      },
+      update: {
+        preferences: JSON.stringify(preferences),
+        updatedAt: new Date(),
+      },
+      create: {
+        userId,
+        tableName,
+        preferences: JSON.stringify(preferences),
+      },
+    });
+
+    res.status(200).json({
+      message: "Preferences saved successfully",
+      preference: updated,
+    });
+  } catch (err: any) {
+    console.error("saveUserPreferences error:", err.message);
+    res.status(500).json({ error: "unexpected_error", message: err.message });
+  }
+};
 
 
 
 
+export const getUserPreferences = async (req: Request, res: Response): Promise<void> => {
+  const userId = req.userId;
+
+  if (!userId) {
+    res.status(401).json({ error: "unauthorized", message: "User is not logged in" });
+    return;
+  }
+
+  const { tableName } = req.params;
+
+  if (!tableName) {
+    res.status(400).json({ error: "Table name is required" });
+    return;
+  }
+
+  try {
+    const preferences = await prisma.userPreference.findUnique({
+      where: {
+        userId_tableName: {
+          userId,
+          tableName,
+        },
+      },
+    });
+
+    if (!preferences) {
+      res.status(404).json({ error: "Preferences not found" });
+      return;
+    }
+
+    res.status(200).json({
+      message: "Preferences retrieved successfully",
+      preferences: JSON.parse(preferences.preferences),
+    });
+  } catch (error: any) {
+    console.error("❌ getUserPreferences error:", error);
+    res.status(500).json({
+      error: "Unexpected server error",
+      message: error.message ?? "Unknown error",
+    });
+  }
+};
 
 
 

@@ -35,8 +35,20 @@ model User {
   group           Group     @relation(fields: [groupId], references: [id])
   flowMeterAttachments FlowMeterAttachment[]
   permissions Permission[] @relation("UserPermissions")
+  preferences            UserPreference[]    @relation("UserPreferenceRelation") // ✅ Add this line
 
 
+}
+model UserPreference {
+  id        Int      @id @default(autoincrement())
+  userId    String   // or Int, depending on your User model
+  tableName String
+  preferences String   // to store columnVisibility as JSON
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+    @@unique([userId, tableName]) // 👈 Add this line
+
+  user        User      @relation("UserPreferenceRelation", fields: [userId], references: [id]) // ✅ Add relation name
 }
 
 model Group {
@@ -71,6 +83,8 @@ model Rfp {
   data            Data?
   maf             MAF?
   attachments     FlowMeterAttachment[]
+  approvalDetails ApprovalDetails?
+
 }
 
 model LocationType {
@@ -99,6 +113,24 @@ model GeneralInfo {
 
   rfp Rfp @relation(fields: [rfpId], references: [id], onDelete: Cascade)
 }
+
+model ApprovalDetails {
+  id                          Int    @id @default(autoincrement())
+  rfpId                       Int    @unique
+  approvalExpiry              String
+  approvedReapplication       String
+  appealApplication           String
+  appealExtensionApplication  String
+  appealExtensionDecision     String
+  panelAppealMeeting          String
+  panelAppealDecisionDate     String
+  doeAppealDecisionDate       String
+  panelAppealFinalResult      String
+
+  rfp Rfp @relation(fields: [rfpId], references: [id], onDelete: Cascade)
+}
+
+
 
 model Location {
   id             Int    @id @default(autoincrement())
