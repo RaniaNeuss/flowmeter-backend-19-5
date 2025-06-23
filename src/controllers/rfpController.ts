@@ -250,12 +250,28 @@ export const createFullRfp = async (req: Request, res: Response): Promise<void> 
     });
 
     // ✅ Update rfpId field in FlowMeterAttachment table
-    if (flatAttachmentIds.length > 0) {
-      await prisma.flowMeterAttachment.updateMany({
-        where: { id: { in: flatAttachmentIds } },
-        data: { rfpId: rfp.id },
-      });
+   if (attachments?.length > 0) {
+  const attachmentObj = attachments[0];
+  const updateOps: Promise<any>[] = [];
+
+  for (const [typeOfAttachment, ids] of Object.entries(attachmentObj)) {
+    const attachmentIds = Array.isArray(ids) ? ids : [ids];
+    for (const id of attachmentIds) {
+      updateOps.push(
+        prisma.flowMeterAttachment.update({
+          where: { id: id as string },
+          data: {
+            rfpId: rfp.id,
+            typeOfAttachment,
+          },
+        })
+      );
     }
+  }
+
+  await Promise.all(updateOps);
+}
+
 
     console.log("✅ RFP created with ID:", rfp.id);
     return void res.status(201).json(rfp);
@@ -278,7 +294,9 @@ export const getFullRfps = async (req: Request, res: Response): Promise<void> =>
         flowRegister: { include: { inventory: true, installation: true, maintenance: true } },
         data: true,
         maf: true,
-        attachments: true,
+       attachments: {
+  select: { id: true, typeOfAttachment: true }
+}
       },
     });
      res.status(200).json(rfps);
@@ -301,7 +319,9 @@ export const getRfpById = async (req: Request, res: Response): Promise<void> => 
         flowRegister: { include: { inventory: true, installation: true, maintenance: true } },
         data: true,
         maf: true,
-        attachments: true,
+        attachments: {
+  select: { id: true, typeOfAttachment: true }
+}
       },
     });
 
