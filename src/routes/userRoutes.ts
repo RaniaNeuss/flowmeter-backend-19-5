@@ -56,15 +56,10 @@ router.get('/:id', authenticateUser, getUser); // Dynamic route
 router.put('/:id', authenticateUser, authorizeRoles('SuperAdmin'), editUser); // Admin only
 router.delete('/:id', authenticateUser, authorizeRoles('SuperAdmin'), authorizePermissions(['users:canDelete']), deleteUser);
 router.post(
-  '/preferences',
-authenticateUser,
-  saveUserPreferences
+  '/preferences',authenticateUser,saveUserPreferences
 );
 
-router.get(
-  '/preferences',
-
-  getUserPreferences
+router.get('/get/preferences/:tableName',authenticateUser,getUserPreferences
 );
 router.post("/register", Register);
 
