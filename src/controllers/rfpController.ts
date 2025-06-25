@@ -287,6 +287,7 @@ export const getFullRfps = async (req: Request, res: Response): Promise<void> =>
       include: {
         LocationType: true,
         generalInfo: true,
+         approvalDetails: true,
         location: true,
         flowMeasurement: true,
         flowRegister: { include: { inventory: true, installation: true, maintenance: true } },
@@ -438,6 +439,7 @@ export const patchRfp = async (req: Request, res: Response): Promise<void> => {
       include: {
         LocationType: true,
         generalInfo: true,
+        approvalDetails: true,
         location: true,
         flowMeasurement: true,
         flowRegister: { include: { inventory: true, installation: true, maintenance: true } },
@@ -469,6 +471,11 @@ export const patchRfp = async (req: Request, res: Response): Promise<void> => {
         update: patchData.GeneralInfo,
       };
     }
+  if (patchData.LocationMeasurement?.approvalDetails) {
+  updateData.approvalDetails = {
+    update: patchData.LocationMeasurement.approvalDetails,
+  };
+}
 
     // Example: Location partial update
     if (patchData.MonitoringDetails?.location) {
@@ -516,6 +523,7 @@ export const patchRfp = async (req: Request, res: Response): Promise<void> => {
         generalInfo: true,
         location: true,
         flowMeasurement: true,
+        approvalDetails: true,
         flowRegister: { include: { inventory: true, installation: true, maintenance: true } },
         data: true,
         maf: true,
