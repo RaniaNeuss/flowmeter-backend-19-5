@@ -4,9 +4,55 @@ import prisma from '../prismaClient';
 import deviceManager from '../runtime/devices/deviceManager';
 import odbc from 'odbc';
 import axios from 'axios';
+import mysql from 'mysql2/promise';
+
 /**
  * Create a new device
  */
+// export const createDevice = async (req: Request, res: Response): Promise<void> => {
+//   try {
+//     const {  name, type, description, property, enabled = true, polling } = req.body;
+
+//     // Validate common fields
+//     if (!name ) {
+//       res.status(400).json({ error: "Device name is required" });
+//     }
+
+//     // Check for duplicate device
+//     const existingDevice = await prisma.device.findUnique({ where: { name } });
+//     if (existingDevice) {
+//       res.status(400).json({ error: "Device with the same name already exists" });
+//     }
+
+//     // Save device to the database
+//     const newDevice = await prisma.device.create({
+//       data: {
+       
+//         name,
+//         type,
+//         description,
+//         property: JSON.stringify(property),
+//         enabled,
+//         polling,
+//         createdAt: new Date(),
+//         updatedAt: new Date(),
+//       },
+//     });
+
+//     console.log(`Device '${newDevice.name}' created.`);
+
+//     // Notify the device manager to initialize the device
+//     if (enabled) {
+//       deviceManager.initializeAndPollDevices([newDevice]);
+//     }
+
+//     res.status(201).json(newDevice);
+
+//   } catch (error) {
+//     console.error("Error creating device:", error);
+//     res.status(500).json({ error: "Failed to create device" });
+//   }
+// };
 export const createDevice = async (req: Request, res: Response): Promise<void> => {
   try {
     const {  name, type, description, property, enabled = true, polling } = req.body;
@@ -51,7 +97,6 @@ export const createDevice = async (req: Request, res: Response): Promise<void> =
     res.status(500).json({ error: "Failed to create device" });
   }
 };
-
 /**
  * Edit a device
  */

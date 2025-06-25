@@ -5,6 +5,9 @@ import { io } from '../../server'; // Import the Socket.IO instance
 import odbc from 'odbc';
 import { writeApi, Point } from '../../influx/influxClient';
 
+import { Client as PgClient } from 'pg';
+import sql from 'mssql';
+
 const connectionString = `
   DSN=MasterPiece;
   TrustServerCertificate=yes;
@@ -27,9 +30,13 @@ const initializeAndPollDevices = async (devices: any[]) => {
       } else if (device.type === 'ODBC') {
         initializeODBCDevice(device);
       }
+
+       else if (device.type === 'database') {
+  const tables = await fetchTablesFromDatabase(device);
+  console.log(`📋 Tables for device ${device.id}:`, tables);      }
     }
-  } catch (error) {
-    console.error('Error during device initialization and polling:', error);
+  } catch (deviceErr) {
+    console.error(`❌ Failed to initialize devices:`, deviceErr);
   }
 };
 
@@ -74,6 +81,81 @@ const initializeODBCDevice = (device: any) => {
 
   const pollingInterval = device.polling || 900000; // Default to 15 minutes
   startODBCPolling(device, pollingInterval);
+};
+
+
+
+const fetchTablesFromDatabase = async (device: any): Promise<string[]> => {
+  try {
+    console.log(`📡 Fetching tables for Device ID: ${device.id}...`);
+
+    const property = device.property ? JSON.parse(device.property) : {};
+    const { dbType, host, port, user, password, databaseName } = property;
+
+    if (!dbType || !host || !user || !password || !databaseName) {
+      console.error("❌ Missing database credentials.");
+      return [];
+    }
+
+    if (dbType === 'postgres') {
+      const client = new PgClient({
+        host,
+        port: Number(port),
+        user,
+        password,
+        database: databaseName,
+      });
+
+      await client.connect();
+
+      const query = `
+        SELECT table_name 
+        FROM information_schema.tables 
+        WHERE table_schema = 'public'
+      `;
+
+      console.log(`🔍 Executing PostgreSQL query: ${query}`);
+      const result = await client.query(query);
+      await client.end();
+
+      const tables = result.rows.map((row) => row.table_name);
+      console.log(`✅ Tables found for device ${device.id}:`, tables);
+      return tables;
+    }
+
+    if (dbType === 'mssql') {
+      await sql.connect({
+        user,
+        password,
+        server: host,
+        database: databaseName,
+        port: Number(port),
+        options: {
+          encrypt: false,
+          trustServerCertificate: true,
+        },
+      });
+
+      const query = `
+        SELECT TABLE_NAME 
+        FROM INFORMATION_SCHEMA.TABLES 
+        WHERE TABLE_TYPE = 'BASE TABLE'
+      `;
+
+      console.log(`🔍 Executing MSSQL query: ${query}`);
+      const result = await sql.query(query);
+      const tables = result.recordset.map((row) => row.TABLE_NAME);
+
+      console.log(`✅ Tables found for device ${device.id}:`, tables);
+      return tables;
+    }
+
+    console.warn(`⚠ Unsupported DB type for device ${device.id}: ${dbType}`);
+    return [];
+  } catch (err) {
+    console.error(`❌ Error fetching tables for device ${device.id}:`, err);
+    return [];
+  }
 };
 
 /**

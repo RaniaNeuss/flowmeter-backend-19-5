@@ -2,7 +2,6 @@
 
 import { Request, Response } from 'express';
 import prisma from '../prismaClient';
-import multer from 'multer';
 import fs from 'fs/promises';
 import path from 'path'; // To get the file extension easily
 import { v4 as uuidv4 } from 'uuid';
@@ -279,6 +278,177 @@ export const createFullRfp = async (req: Request, res: Response): Promise<void> 
   }
 };
 
+export const updateFullRfp = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const rfpId = Number(id);
+
+    const {
+      BasicInformation,
+      generalInfo,
+      LocationMeasurement,
+      MonitoringDetails,
+      FlowmeterDetails,
+      FlowmeterInventory,
+      FlowmeterInstallationMaintenance,
+      DataCollectionExchange,
+      maf,
+      attachments,
+    } = req.body;
+
+    const existing = await prisma.rfp.findUnique({ where: { id: rfpId } });
+    if (!existing) return void res.status(404).json({ error: "RFP not found" });
+
+    const flatAttachmentIds: string[] = attachments?.[0]
+      ? (Object.values(attachments[0]).flat() as string[])
+      : [];
+
+    // ✅ Step 1: Update one-to-one nested models explicitly
+    if (generalInfo) {
+      await prisma.generalInfo.update({
+        where: { rfpId },
+        data: {
+          licensee: generalInfo.licensee,
+          address: generalInfo.address,
+          contactNumber: generalInfo.contactNumber,
+          faxNumber: generalInfo.faxNumber,
+          reportDate: generalInfo.reportDate,
+          reportRef: generalInfo.reportRef,
+          responsiblePosition: generalInfo.responsiblePosition,
+          responsibleDepartment: generalInfo.responsibleDepartment,
+          fmIdScada: generalInfo.fmIdScada,
+          fmIdSwsAssetNo: generalInfo.fmIdSwsAssetNo,
+          siteManagerName: generalInfo.siteManagerName,
+        },
+      });
+    }
+
+    if (MonitoringDetails?.location) {
+      await prisma.location.update({
+        where: { rfpId },
+        data: {
+          region: MonitoringDetails.location.region,
+          stpcc: MonitoringDetails.location.stpcc,
+          description: MonitoringDetails.location.description,
+          coordinateN: MonitoringDetails.location.coordinateN,
+          coordinateE: MonitoringDetails.location.coordinateE,
+          siteDrawingRef: MonitoringDetails.location.siteDrawingRef,
+          flowDiagramRef: MonitoringDetails.location.flowDiagramRef,
+        },
+      });
+    }
+
+    if (LocationMeasurement?.approvalDetails) {
+      await prisma.approvalDetails.update({
+        where: { rfpId },
+        data: LocationMeasurement.approvalDetails,
+      });
+    }
+
+    if (FlowmeterDetails?.flowMonitoring?.selectedOption) {
+      await prisma.flowMeasurement.update({
+        where: { rfpId },
+        data: {
+          selectedOption: FlowmeterDetails.flowMonitoring.selectedOption,
+        },
+      });
+    }
+
+    if (DataCollectionExchange?.data) {
+      await prisma.data.update({
+        where: { rfpId },
+        data: DataCollectionExchange.data,
+      });
+    }
+
+    if (maf) {
+      await prisma.mAF.update({
+        where: { rfpId },
+        data: maf,
+      });
+    }
+
+    // ✅ Step 2: Update flow register components if exist
+    const flowRegister = await prisma.flowMonitoringRegister.findUnique({ where: { rfpId } });
+    if (flowRegister) {
+      await Promise.all([
+        FlowmeterInventory?.inventory &&
+          prisma.inventory.update({
+            where: { id: flowRegister.inventoryId },
+            data: FlowmeterInventory.inventory,
+          }),
+
+        FlowmeterInstallationMaintenance?.installation &&
+          prisma.installation.update({
+            where: { id: flowRegister.installationId },
+            data: {
+              ...FlowmeterInstallationMaintenance.installation,
+              meterInstallDate: FlowmeterDetails?.flowMonitoring?.meterInstallDate,
+              meterRemovalDate: FlowmeterDetails?.flowMonitoring?.meterRemovalDate,
+            },
+          }),
+
+        FlowmeterInstallationMaintenance?.maintenance &&
+          prisma.maintenance.update({
+            where: { id: flowRegister.maintenanceId },
+            data: FlowmeterInstallationMaintenance.maintenance,
+          }),
+      ]);
+    }
+
+    // ✅ Step 3: Update RFP root fields
+    const updatedRfp = await prisma.rfp.update({
+      where: { id: rfpId },
+      data: {
+        typeOfRfp: BasicInformation?.typeOfRfp,
+        RfpReference: BasicInformation?.rfpReference,
+        startDate: DataCollectionExchange?.startDate,
+        completionDate: DataCollectionExchange?.completionDate,
+        panelMeetingDate: LocationMeasurement?.approvalDetails?.panelAppealMeeting,
+        panelDecisionDate: LocationMeasurement?.approvalDetails?.panelAppealDecisionDate,
+        LocationType: MonitoringDetails?.locationType?.type
+          ? {
+              upsert: {
+                update: { type: MonitoringDetails.locationType.type },
+                create: { type: MonitoringDetails.locationType.type },
+              },
+            }
+          : undefined,
+      },
+      include: {
+        LocationType: true,
+        generalInfo: true,
+        location: true,
+        flowMeasurement: true,
+        flowRegister: {
+          include: {
+            inventory: true,
+            installation: true,
+            maintenance: true,
+          },
+        },
+        data: true,
+        maf: true,
+        approvalDetails: true,
+        attachments: true,
+      },
+    });
+
+    // ✅ Step 4: Reassign attachments to this RFP
+    if (flatAttachmentIds.length > 0) {
+      await prisma.flowMeterAttachment.updateMany({
+        where: { id: { in: flatAttachmentIds } },
+        data: { rfpId },
+      });
+    }
+
+    console.log("✅ RFP updated successfully");
+    res.status(200).json(updatedRfp);
+  } catch (err: any) {
+    console.error("❌ updateFullRfp error:", err);
+    res.status(500).json({ error: err.message || "Internal server error" });
+  }
+};
 
 
 export const getFullRfps = async (req: Request, res: Response): Promise<void> => {
@@ -428,115 +598,12 @@ export const deleteRfp = async (req: Request, res: Response): Promise<void> => {
   }
 };
 
+// PATCH /api/rfp/:id
 
-export const patchRfp = async (req: Request, res: Response): Promise<void> => {
-  try {
-    const { id } = req.params;
-    const patchData = req.body;
 
-    const existing = await prisma.rfp.findUnique({
-      where: { id: Number(id) },
-      include: {
-        LocationType: true,
-        generalInfo: true,
-        approvalDetails: true,
-        location: true,
-        flowMeasurement: true,
-        flowRegister: { include: { inventory: true, installation: true, maintenance: true } },
-        data: true,
-        maf: true,
-        attachments: true,
-      },
-    });
 
-    if (!existing) {
-      res.status(404).json({ error: 'RFP not found' });
-      return;
-    }
 
-    // Prepare update object with optional nested updates
-    const updateData: any = {};
 
-    // Top-level fields
-    if (patchData.BasicInformation?.typeOfRfp) {
-      updateData.typeOfRfp = patchData.BasicInformation.typeOfRfp;
-    }
-    if (patchData.BasicInformation?.rfpReference) {
-      updateData.RfpReference = patchData.BasicInformation.rfpReference;
-    }
-
-    // Example: GeneralInfo partial update
-    if (patchData.GeneralInfo) {
-      updateData.generalInfo = {
-        update: patchData.GeneralInfo,
-      };
-    }
-  if (patchData.LocationMeasurement?.approvalDetails) {
-  updateData.approvalDetails = {
-    update: patchData.LocationMeasurement.approvalDetails,
-  };
-}
-
-    // Example: Location partial update
-    if (patchData.MonitoringDetails?.location) {
-      updateData.location = {
-        update: patchData.MonitoringDetails.location,
-      };
-    }
-
-    // Repeat for other nested relations as needed:
-    if (patchData.LocationMeasurement?.approvalDetails) {
-      updateData.panelMeetingDate = patchData.LocationMeasurement.approvalDetails.panelAppealMeeting;
-      updateData.panelDecisionDate = patchData.LocationMeasurement.approvalDetails.panelAppealDecisionDate;
-    }
-
-    if (patchData.MonitoringDetails?.locationType) {
-      updateData.LocationType = {
-        update: patchData.MonitoringDetails.locationType,
-      };
-    }
-
-    if (patchData.FlowmeterDetails?.flowMonitoring?.selectedOption) {
-      updateData.flowMeasurement = {
-        update: { selectedOption: patchData.FlowmeterDetails.flowMonitoring.selectedOption },
-      };
-    }
-
-    if (patchData.DataCollectionExchange?.data) {
-      updateData.data = {
-        update: patchData.DataCollectionExchange.data,
-      };
-    }
-
-    if (patchData.DataCollectionExchange?.maf) {
-      updateData.maf = {
-        update: patchData.DataCollectionExchange.maf,
-      };
-    }
-
-    // Finally, apply the update
-    const updatedRfp = await prisma.rfp.update({
-      where: { id: Number(id) },
-      data: updateData,
-      include: {
-        LocationType: true,
-        generalInfo: true,
-        location: true,
-        flowMeasurement: true,
-        approvalDetails: true,
-        flowRegister: { include: { inventory: true, installation: true, maintenance: true } },
-        data: true,
-        maf: true,
-        attachments: true,
-      },
-    });
-
-    res.status(200).json(updatedRfp);
-  } catch (err: any) {
-    console.error('❌ patchRfp error:', err);
-    res.status(500).json({ error: err.message || 'Internal server error' });
-  }
-};
 
 
 export const updateFile = async (req: Request, res: Response): Promise<void> => {

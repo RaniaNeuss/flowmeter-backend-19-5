@@ -6,8 +6,8 @@ import {
   getFilteredRfps,
   getFullRfps,
   getRfpById,
-  patchRfp, updateFile, deleteFile,
-  deleteRfp,uploadFile,getFilesByRfpId
+ updateFile, deleteFile,
+  deleteRfp,uploadFile,getFilesByRfpId,updateFullRfp
 } from '../controllers/rfpController';
 import { authenticateUser } from "../lib/authMiddleware";
 import { authorizeRoles } from '../lib/authorizeRoles';
@@ -30,7 +30,7 @@ router.get('/:id', authenticateUser, getRfpById);
 router.post('/filter', authenticateUser, getFilteredRfps);
 
 // Patch (update) RFP by ID
-router.patch('/:id',authenticateUser, authorizeRoles('SuperAdmin'), patchRfp);
+router.patch('/:id',authenticateUser, authorizeRoles('SuperAdmin'), updateFullRfp);
 
 // Delete RFP by ID
 router.delete('/:id',authenticateUser, authorizeRoles('SuperAdmin'), deleteRfp);
