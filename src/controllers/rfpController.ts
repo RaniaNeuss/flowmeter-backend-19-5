@@ -113,9 +113,12 @@ export const createFullRfp = async (req: Request, res: Response): Promise<void> 
       return void res.status(400).json({ error: 'typeOfRfp and rfpReference are required.' });
     }
 
-    const duplicate = await prisma.rfp.findUnique({ where: { RfpReference: rfpReference } });
+      const duplicate = await prisma.rfp.findUnique({ where: { RfpReference: rfpReference } });
     if (duplicate) {
-      return void res.status(409).json({ error: `Duplicate RfpReference: ${rfpReference}` });
+      return void res.status(409).json({
+        error: "conflict_error",
+        message: `RfpReference "${rfpReference}" already exists.`,
+      });
     }
 
     const g = GeneralInfo;
@@ -445,8 +448,19 @@ export const updateFullRfp = async (req: Request, res: Response): Promise<void> 
     console.log("✅ RFP updated successfully");
     res.status(200).json(updatedRfp);
   } catch (err: any) {
-    console.error("❌ updateFullRfp error:", err);
-    res.status(500).json({ error: err.message || "Internal server error" });
+    if (res.headersSent) return;
+
+    console.error("❌ createFullRfp error:", err);
+
+    // Handle Prisma unique constraint error
+    if (err.code === 'P2002' && err.meta?.target?.includes('RfpReference')) {
+      return void res.status(409).json({
+        error: "conflict_error",
+        message: `RfpReference "${req.body?.BasicInformation?.rfpReference}" already exists.`,
+      });
+    }
+
+    return void res.status(500).json({ error: err.message || "Internal server error" });
   }
 };
 
