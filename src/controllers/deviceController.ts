@@ -5,7 +5,8 @@ import deviceManager from '../runtime/devices/deviceManager';
 import odbc from 'odbc';
 import axios from 'axios';
 import mysql from 'mysql2/promise';
-
+import { Client as PgClient } from 'pg';
+import sql from 'mssql';
 /**
  * Create a new device
  */
@@ -97,6 +98,121 @@ export const createDevice = async (req: Request, res: Response): Promise<void> =
     res.status(500).json({ error: "Failed to create device" });
   }
 };
+
+export const getDeviceTables = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { deviceId } = req.params;
+    const device = await prisma.device.findUnique({ where: { id: deviceId } });
+
+    if (!device) {
+      res.status(404).json({ error: 'Device not found' });
+       return;
+    }
+
+    const property = device.property ? JSON.parse(device.property) : {};
+    const { dbType, host, port, user, password, databaseName } = property;
+
+    if (!dbType || !host || !user || !password || !databaseName) {
+       res.status(400).json({ error: 'Missing database credentials in device config.' });
+      
+    }
+
+    let tables: string[] = [];
+
+    if (dbType === 'postgres') {
+      const client = new PgClient({ host, port: Number(port), user, password, database: databaseName });
+      await client.connect();
+
+      const result = await client.query(`SELECT table_name FROM information_schema.tables WHERE table_schema = 'public'`);
+      tables = result.rows.map((row) => row.table_name);
+      await client.end();
+    } else if (dbType === 'mssql') {
+      await sql.connect({
+        user,
+        password,
+        server: host,
+        database: databaseName,
+        port: Number(port),
+        options: {
+          encrypt: false,
+          trustServerCertificate: true,
+        },
+      });
+
+      const result = await sql.query(`SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_TYPE = 'BASE TABLE'`);
+      tables = result.recordset.map((row: any) => row.TABLE_NAME);
+    } else {
+      res.status(400).json({ error: `Unsupported dbType '${dbType}'` });
+       return;
+    }
+
+    res.status(200).json({ tables });
+  } catch (err: any) {
+    console.error("❌ Error getting device tables:", err);
+    res.status(500).json({ error: 'Failed to fetch tables.', details: err.message });
+  }
+};
+
+export const getDeviceTableData = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { deviceId, tableName } = req.params;
+    const device = await prisma.device.findUnique({ where: { id: deviceId } });
+
+    if (!device) {
+     res.status(404).json({ error: 'Device not found' });
+      return ;
+    }
+
+    const property = device.property ? JSON.parse(device.property) : {};
+    const { dbType, host, port, user, password, databaseName } = property;
+
+    if (!dbType || !host || !user || !password || !databaseName) {
+       res.status(400).json({ error: 'Missing database credentials in device config.' });
+       return;
+    }
+
+    if (!tableName) {
+       res.status(400).json({ error: 'Table name is required.' });
+       return;
+    }
+
+    let data: any[] = [];
+
+    if (dbType === 'postgres') {
+      const client = new PgClient({ host, port: Number(port), user, password, database: databaseName });
+      await client.connect();
+      const result = await client.query(`SELECT * FROM "${tableName}"`);
+      data = result.rows;
+      await client.end();
+    } else if (dbType === 'mssql') {
+      await sql.connect({
+        user,
+        password,
+        server: host,
+        database: databaseName,
+        port: Number(port),
+        options: {
+          encrypt: false,
+          trustServerCertificate: true,
+        },
+      });
+
+      const result = await sql.query(`SELECT * FROM [${tableName}]`);
+      data = result.recordset;
+    } else {
+      res.status(400).json({ error: `Unsupported dbType '${dbType}'` });
+      return ;
+    }
+
+    res.status(200).json({ table: tableName, rowCount: data.length, data });
+  } catch (err: any) {
+    console.error("❌ Error fetching table data:", err);
+    res.status(500).json({ error: 'Failed to fetch table data.', details: err.message });
+  }
+};
+
+
+
 /**
  * Edit a device
  */

@@ -248,6 +248,7 @@ export const createFullRfp = async (req: Request, res: Response): Promise<void> 
         LocationType: true,
         generalInfo: true,
         location: true,
+        
         flowMeasurement: true,
         flowRegister: {
           include: {
