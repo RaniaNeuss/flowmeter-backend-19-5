@@ -72,9 +72,6 @@ model Rfp {
   RfpReference      String    @unique
   startDate         String?
   completionDate    String?
-  panelMeetingDate  String?
-  panelDecisionDate String?
-
   LocationType    LocationType?
   generalInfo     GeneralInfo?
   location        Location?
