@@ -387,8 +387,58 @@ export const upsertFieldPermission = async (req: Request, res: Response): Promis
   }
 };
 
+// GET /api/permissions
+export const getAllPermissions = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const tablePermissions = await prisma.tablePermission.findMany({
+      include: {
+        user: {
+          select: { id: true, username: true, email: true },
+        },
+        group: {
+          select: { id: true, name: true },
+        },
+      },
+    });
+
+    const fieldPermissions = await prisma.fieldPermission.findMany({
+      include: {
+        user: {
+          select: { id: true, username: true, email: true },
+        },
+        group: {
+          select: { id: true, name: true },
+        },
+      },
+    });
+
+    res.status(200).json({
+      message: "Permissions fetched successfully",
+      tablePermissions,
+      fieldPermissions,
+    });
+  } catch (error: any) {
+    console.error("❌ getAllPermissions error:", error.message);
+    res.status(500).json({ error: "Failed to retrieve permissions", details: error.message });
+  }
+};
 
 
+// DELETE /api/permissions/table/:id
+export const deleteTablePermission = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+
+    await prisma.tablePermission.delete({
+      where: { id: Number(id) },
+    });
+
+    res.status(200).json({ message: "Table permission deleted successfully" });
+  } catch (error: any) {
+    console.error("❌ deleteTablePermission error:", error.message);
+    res.status(500).json({ error: "Failed to delete table permission", details: error.message });
+  }
+};
 
 
 
