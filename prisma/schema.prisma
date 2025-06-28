@@ -35,7 +35,7 @@ model User {
   group           Group     @relation(fields: [groupId], references: [id])
   flowMeterAttachments FlowMeterAttachment[]
   preferences            UserPreference[]    @relation("UserPreferenceRelation") // ✅ Add this line
-   tablePermissions TablePermission[] @relation("UserTablePermissions")
+  tablePermissions TablePermission[] @relation("UserTablePermissions")
   fieldPermissions FieldPermission[] @relation("UserFieldPermissions")
 
 }

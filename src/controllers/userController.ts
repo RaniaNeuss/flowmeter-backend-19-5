@@ -167,7 +167,16 @@ export const getUsers = async (req: Request, res: Response): Promise<void> => {
         loginAttempts: true,
         createdAt: true,
         updatedAt: true,
-       
+       tablePermissions: {
+  select: {
+    tableName: true,
+    canRead: true,
+    canCreate: true,
+    canUpdate: true,
+    canDelete: true
+  }
+}
+,
         group: {
           select: {
             id: true,
@@ -662,10 +671,10 @@ export const logout = (req: Request, res: Response): void => {
 // Controller: Get User by ID
 export const getUser = async (req: Request, res: Response): Promise<void> => {
   try {
-    const userId = req.userId;
+    const userId = req.params.id;
 
     if (!userId) {
-      res.status(401).json({ error: 'Unauthorized', message: 'User is not logged in' });
+      res.status(400).json({ error: 'validation_error', message: 'User ID is required' });
       return;
     }
 
@@ -683,12 +692,17 @@ export const getUser = async (req: Request, res: Response): Promise<void> => {
         updatedAt: true,
         groupId: true,
         group: {
-          select: {
-            name: true,
-           
-          }
+          select: { name: true }
         },
-       
+        tablePermissions: {
+          select: {
+            tableName: true,
+            canRead: true,
+            canCreate: true,
+            canUpdate: true,
+            canDelete: true
+          }
+        }
       }
     });
 
@@ -697,15 +711,13 @@ export const getUser = async (req: Request, res: Response): Promise<void> => {
       return;
     }
 
-    res.status(200).json({
-      ...user,
-      // group: user.group?.name || null,
-    });
+    res.status(200).json(user);
   } catch (err: any) {
-    console.error("api get user:", err.message);
+    console.error("❌ Error in getUser:", err.message);
     res.status(500).json({ error: "unexpected_error", message: err.message });
   }
 };
+
 // Controller: Get My Profile
 export const getMyProfile = async (req: Request, res: Response): Promise<void> => {
     try {
@@ -733,6 +745,15 @@ export const getMyProfile = async (req: Request, res: Response): Promise<void> =
                         name: true,
                     },
                 },
+                 tablePermissions: {
+          select: {
+            tableName: true,
+            canRead: true,
+            canCreate: true,
+            canUpdate: true,
+            canDelete: true
+          }
+        }
             },
         });
 
@@ -753,6 +774,7 @@ export const getMyProfile = async (req: Request, res: Response): Promise<void> =
                 status: user.status,
                 createdAt: user.createdAt,
                 updatedAt: user.updatedAt,
+                tablePermissions: user.tablePermissions || [], // Ensure tablePermissions is always an array
                 group: user.group ? user.group.name : null, // Handle case where group might be null
             },
         });

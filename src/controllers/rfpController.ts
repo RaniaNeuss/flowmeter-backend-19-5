@@ -92,7 +92,103 @@ const typeOfAttachment = req.body.typeOfAttachment?.trim() || 'Unknown';
     res.status(500).json({ error: 'Failed to upload file.', details: err.message });
   }
 };
+export const updateFile = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const {
+      filename_download,
+      title,
+      description,
+      location,
+      tags,
+      width,
+      height,
+      duration
+    } = req.body;
 
+    const updatedById = req.userId; // From the authentication middleware
+
+    const updatedAttachment = await prisma.flowMeterAttachment.update({
+      where: { id },
+      data: {
+        filename_download: filename_download || undefined,
+        title: title || undefined,
+        description: description || undefined,
+        location: location || undefined,
+        tags: tags || undefined,
+        width: width ? parseInt(width, 10) : undefined,
+        height: height ? parseInt(height, 10) : undefined,
+        duration: duration ? parseFloat(duration) : undefined,
+        updatedById
+      }
+    });
+
+    res.status(200).json({
+      message: 'File updated successfully.',
+      attachment: updatedAttachment
+    });
+  } catch (err: any) {
+    console.error('❌ Update file error:', err);
+    res.status(500).json({ error: 'Failed to update file.', details: err.message });
+  }
+};
+export const deleteFile = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const deletedById = req.userId; // From the auth middleware
+
+    // Update the record first to track who deleted it
+    await prisma.flowMeterAttachment.update({
+      where: { id },
+      data: { updatedById: deletedById }
+    });
+
+    // Delete the file record
+    await prisma.flowMeterAttachment.delete({
+      where: { id }
+    });
+
+    res.status(200).json({ message: 'File deleted successfully.' });
+  } catch (err: any) {
+    console.error('❌ Delete file error:', err);
+    res.status(500).json({ error: 'Failed to delete file.', details: err.message });
+  }
+};
+export const getFilesByRfpId = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { rfpId } = req.params;
+
+    if (!rfpId) {
+      res.status(400).json({ error: 'rfpId parameter is required.' });
+      return;
+    }
+
+    const attachments = await prisma.flowMeterAttachment.findMany({
+      where: { rfpId: Number(rfpId) },
+      orderBy: { uploadedAt: 'desc' },
+    });
+
+    const grouped = {
+      CollaborationCertificate: attachments
+        .filter((a) => a.typeOfAttachment === 'CollaborationCertificate')
+        .map((a) => a.id),
+      AnotherFile: attachments
+        .filter((a) => a.typeOfAttachment === 'AnotherFile')
+        .map((a) => a.id),
+      FlowMeterImages: attachments
+        .filter((a) => a.typeOfAttachment === 'FlowMeterImages')
+        .map((a) => a.id),
+    };
+
+    res.status(200).json({
+      message: 'Attachments grouped by typeOfAttachment.',
+      attachments: grouped,
+    });
+  } catch (err: any) {
+    console.error('❌ getFilesByRfpId error:', err);
+    res.status(500).json({ error: 'Failed to fetch attachments.', details: err.message });
+  }
+};
 
 export const createFullRfp = async (req: Request, res: Response): Promise<void> => {
   try {
@@ -467,7 +563,6 @@ export const updateFullRfp = async (req: Request, res: Response): Promise<void> 
   }
 };
 
-
 export const getFullRfps = async (req: Request, res: Response): Promise<void> => {
   try {
     const rfps = await prisma.rfp.findMany({
@@ -640,119 +735,6 @@ export const deleteRfp = async (req: Request, res: Response): Promise<void> => {
     res.status(500).json({ error: err.message || 'Internal server error' });
   }
 };
-
-// PATCH /api/rfp/:id
-
-
-
-
-
-
-
-export const updateFile = async (req: Request, res: Response): Promise<void> => {
-  try {
-    const { id } = req.params;
-    const {
-      filename_download,
-      title,
-      description,
-      location,
-      tags,
-      width,
-      height,
-      duration
-    } = req.body;
-
-    const updatedById = req.userId; // From the authentication middleware
-
-    const updatedAttachment = await prisma.flowMeterAttachment.update({
-      where: { id },
-      data: {
-        filename_download: filename_download || undefined,
-        title: title || undefined,
-        description: description || undefined,
-        location: location || undefined,
-        tags: tags || undefined,
-        width: width ? parseInt(width, 10) : undefined,
-        height: height ? parseInt(height, 10) : undefined,
-        duration: duration ? parseFloat(duration) : undefined,
-        updatedById
-      }
-    });
-
-    res.status(200).json({
-      message: 'File updated successfully.',
-      attachment: updatedAttachment
-    });
-  } catch (err: any) {
-    console.error('❌ Update file error:', err);
-    res.status(500).json({ error: 'Failed to update file.', details: err.message });
-  }
-};
-
-export const deleteFile = async (req: Request, res: Response): Promise<void> => {
-  try {
-    const { id } = req.params;
-    const deletedById = req.userId; // From the auth middleware
-
-    // Update the record first to track who deleted it
-    await prisma.flowMeterAttachment.update({
-      where: { id },
-      data: { updatedById: deletedById }
-    });
-
-    // Delete the file record
-    await prisma.flowMeterAttachment.delete({
-      where: { id }
-    });
-
-    res.status(200).json({ message: 'File deleted successfully.' });
-  } catch (err: any) {
-    console.error('❌ Delete file error:', err);
-    res.status(500).json({ error: 'Failed to delete file.', details: err.message });
-  }
-};
-
-
-export const getFilesByRfpId = async (req: Request, res: Response): Promise<void> => {
-  try {
-    const { rfpId } = req.params;
-
-    if (!rfpId) {
-      res.status(400).json({ error: 'rfpId parameter is required.' });
-      return;
-    }
-
-    const attachments = await prisma.flowMeterAttachment.findMany({
-      where: { rfpId: Number(rfpId) },
-      orderBy: { uploadedAt: 'desc' },
-    });
-
-    const grouped = {
-      CollaborationCertificate: attachments
-        .filter((a) => a.typeOfAttachment === 'CollaborationCertificate')
-        .map((a) => a.id),
-      AnotherFile: attachments
-        .filter((a) => a.typeOfAttachment === 'AnotherFile')
-        .map((a) => a.id),
-      FlowMeterImages: attachments
-        .filter((a) => a.typeOfAttachment === 'FlowMeterImages')
-        .map((a) => a.id),
-    };
-
-    res.status(200).json({
-      message: 'Attachments grouped by typeOfAttachment.',
-      attachments: grouped,
-    });
-  } catch (err: any) {
-    console.error('❌ getFilesByRfpId error:', err);
-    res.status(500).json({ error: 'Failed to fetch attachments.', details: err.message });
-  }
-};
-
-
-
-
 export const getFilteredRfps = async (req: Request, res: Response): Promise<void> => {
   try {
     const { page = 1, limit = 10, search = '', typeFilter = '', licenseeFilter = '' } = req.body;
