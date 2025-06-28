@@ -5,7 +5,7 @@ import {
   createFullRfp,
   getFilteredRfps,
   getFullRfps,
-  getRfpById,
+  getRfpById,getFileById,
  updateFile, deleteFile,
   deleteRfp,uploadFile,getFilesByRfpId,updateFullRfp
 } from '../controllers/rfpController';
@@ -40,5 +40,6 @@ const upload = multer({ dest: 'uploads/' });
 
 router.post('/upload', upload.any(), uploadFile);
 router.get('/attachments/by-rfp/:rfpId',authenticateUser, authorizeRoles('SuperAdmin'), getFilesByRfpId);
+router.get('/files/:id',authenticateUser, getFileById);
 
 export default router;
