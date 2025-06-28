@@ -34,9 +34,9 @@ model User {
   groupId         Int
   group           Group     @relation(fields: [groupId], references: [id])
   flowMeterAttachments FlowMeterAttachment[]
-  permissions Permission[] @relation("UserPermissions")
   preferences            UserPreference[]    @relation("UserPreferenceRelation") // ✅ Add this line
-
+   tablePermissions TablePermission[] @relation("UserTablePermissions")
+  fieldPermissions FieldPermission[] @relation("UserFieldPermissions")
 
 }
 model UserPreference {
@@ -55,16 +55,45 @@ model Group {
   id          Int           @id @default(autoincrement())
   name        String        @unique
   users       User[]
-  permissions Permission[]  @relation("GroupPermissions")
+  tablePermissions TablePermission[] @relation("GroupTablePermissions")
+  fieldPermissions FieldPermission[] @relation("GroupFieldPermissions")
 }
 
-model Permission {
-  id        String   @id @default(uuid())
-  action    String   @unique
-  groups    Group[]  @relation("GroupPermissions")
-  users   User[]   @relation("UserPermissions")
 
+
+model TablePermission {
+  id         Int      @id @default(autoincrement())
+  userId     String?  // optional if tied to user
+  groupId    Int?     // optional if tied to group
+  tableName  String
+  canRead    Boolean  @default(false)
+  canCreate  Boolean  @default(false)
+  canUpdate  Boolean  @default(false)
+  canDelete  Boolean  @default(false)
+
+    user       User?    @relation("UserTablePermissions", fields: [userId], references: [id])
+  group      Group?   @relation("GroupTablePermissions", fields: [groupId], references: [id])
+  @@unique([userId, tableName])
+@@unique([groupId, tableName])
 }
+
+model FieldPermission {
+  id          Int     @id @default(autoincrement())
+  userId      String?
+  groupId     Int?
+  tableName   String
+  fieldName   String
+  canRead     Boolean @default(false)
+  canUpdate   Boolean @default(false)
+
+    user        User?   @relation("UserFieldPermissions", fields: [userId], references: [id])
+  group       Group?  @relation("GroupFieldPermissions", fields: [groupId], references: [id])
+
+  @@unique([userId, tableName, fieldName])
+@@unique([groupId, tableName, fieldName])
+}
+
+
 
 model Rfp {
   id                Int       @id @default(autoincrement())

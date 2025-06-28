@@ -1,10 +1,9 @@
 import { Router } from 'express';
-import { getUsers,refreshtoken,sendOtpToUser,  getUserPreferences,  saveUserPreferences,verifyOtp,editUser,forgotPassword, resetPassword ,assignPermissionsToRole,getMyProfile, Register,createUser, deleteUser, getGroups, createGroup, deleteGroup, getUser, login , authStatus ,logout,editProfile } from '../controllers/userController';
+import { getUsers,refreshtoken,sendOtpToUser, upsertTablePermission, upsertFieldPermission, getUserPreferences,  saveUserPreferences,verifyOtp,editUser,forgotPassword, resetPassword ,getMyProfile, Register,createUser, deleteUser, getGroups, createGroup, deleteGroup, getUser, login , authStatus ,logout,editProfile } from '../controllers/userController';
 import passport from "passport";
 import jwt from "jsonwebtoken";
 import { JWT_SECRET, REFRESH_SECRET } from "../lib/config";
 import { authorizeRoles } from '../lib/authorizeRoles';
-import { authorizePermissions } from '../lib//authorizePermissions';
 import { UserStatus } from "@prisma/client"; // 👈 import the enum
 import { authenticateUser } from "../lib/authMiddleware";
 import { Request, Response, NextFunction } from "express";
@@ -50,11 +49,9 @@ router.put('/me', authenticateUser, editProfile);   // Update own profile
 
 router.get('/', authenticateUser, authorizeRoles('SuperAdmin'), getUsers); // Admin only
 router.post('/', authenticateUser, authorizeRoles('SuperAdmin'), createUser); // Admin only
-router.post('/assign-permissions', authenticateUser, authorizeRoles('SuperAdmin'),assignPermissionsToRole); // Admin only
-
 router.get('/:id', authenticateUser, getUser); // Dynamic route
 router.put('/:id', authenticateUser, authorizeRoles('SuperAdmin'), editUser); // Admin only
-router.delete('/:id', authenticateUser, authorizeRoles('SuperAdmin'), authorizePermissions(['users:canDelete']), deleteUser);
+router.delete('/:id', authenticateUser, authorizeRoles('SuperAdmin'),  deleteUser);
 router.post(
   '/preferences',authenticateUser,saveUserPreferences
 );
@@ -63,6 +60,8 @@ router.get('/get/preferences/:tableName',authenticateUser,getUserPreferences
 );
 router.post("/register", Register);
 
+router.post('/permissions/table', authenticateUser, authorizeRoles('SuperAdmin'), upsertTablePermission);
+router.post('/permissions/field', authenticateUser, authorizeRoles('SuperAdmin'), upsertFieldPermission);
 /** ===========================
  *        AUTH ROUTES
  * =========================== */
@@ -92,13 +91,7 @@ router.post("/refreshtoken", async (req: Request, res: Response): Promise<void> 
         res.status(403).json({ message: "Invalid refresh token" });
     }
 });
-
-
-
 router.post("/login",login);
-
-
-
 router.post("/logout", (req, res) => {
     req.logout((err) => {
         if (err) return res.status(500).json({ message: "Logout error" });

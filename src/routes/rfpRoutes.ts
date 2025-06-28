@@ -11,7 +11,7 @@ import {
 } from '../controllers/rfpController';
 import { authenticateUser } from "../lib/authMiddleware";
 import { authorizeRoles } from '../lib/authorizeRoles';
-import { authorizePermissions } from '../lib//authorizePermissions';
+// import { authorizePermissions } from '../lib//authorizePermissions';
 import multer from 'multer';
 const router = Router();
 // Create a new RFP

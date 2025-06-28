@@ -21,6 +21,372 @@ declare global {
 }
 
 
+
+
+/** ===========================
+ *        ADMIN
+ * =========================== */
+
+// Controller: Create User
+export const createUser = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { email, password, group,  username } = req.body;
+
+    if (!email || !password) {
+      res.status(400).json({ error: "validation_error", message: "Email and password are required" });
+      return;
+    }
+
+    const existingEmail = await prisma.user.findUnique({ where: { email } });
+    if (existingEmail) {
+      res.status(409).json({ error: "conflict_error", message: `Email "${email}" is already taken` });
+      return;
+    }
+
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    let assignedGroup = await prisma.group.findUnique({ where: { name: group || "User" } });
+    if (!assignedGroup) {
+      assignedGroup = await prisma.group.create({ data: { name: group || "User" } });
+    }
+
+    const newUser = await prisma.user.create({
+      data: {
+        email,
+          username,
+        password: hashedPassword,
+        groupId: assignedGroup.id
+      }
+    });
+
+    res.status(201).json({
+      message: "User created successfully",
+      user: {
+        id: newUser.id,
+        email: newUser.email,
+        group: assignedGroup.name
+      }
+    });
+  } catch (err: any) {
+    console.error("Failed to create user:", err.message);
+    res.status(500).json({ error: "unexpected_error", message: err.message });
+  }
+};
+export const editUser = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const adminUserId = req.userId;
+    const { id } = req.params;
+    const { email, name, info, username, password, group, status } = req.body;
+
+    if (!id) {
+      res.status(400).json({ error: "validation_error", message: "User ID is required." });
+      return;
+    }
+
+    const user = await prisma.user.findUnique({ where: { id } });
+    if (!user) {
+      res.status(404).json({ error: "not_found", message: `User with ID ${id} not found.` });
+      return;
+    }
+
+    const isAdmin = await prisma.user.findFirst({ where: { id: adminUserId, groupId: 1 } });
+    if (!isAdmin && adminUserId !== id) {
+      res.status(403).json({ error: "forbidden", message: "You do not have permission to edit this user." });
+      return;
+    }
+
+    const updateData: any = {
+      email: email || undefined,
+      name: name || undefined,
+      info: info || undefined,
+      username: username || undefined,
+      updatedAt: new Date()
+    };
+
+    // Hash password if provided
+    if (password) {
+      if (password.length < 6) {
+        res.status(400).json({ error: "validation_error", message: "Password must be at least 6 characters long" });
+        return;
+      }
+      updateData.password = await bcrypt.hash(password, 10);
+    }
+
+    // Handle status update + loginAttempts reset if status is reactivated
+    if (status) {
+      updateData.status = status;
+      if (status === "active" && user.status === "suspended") {
+        updateData.loginAttempts = 0;
+      }
+    }
+
+    // Group update
+    if (group) {
+      const existingGroup = await prisma.group.findUnique({ where: { name: group } });
+      if (!existingGroup) {
+        res.status(404).json({ error: "not_found", message: `Group "${group}" does not exist.` });
+        return;
+      }
+      updateData.groupId = existingGroup.id;
+    }
+
+    const updatedUser = await prisma.user.update({
+      where: { id },
+      data: updateData,
+    });
+
+    res.status(200).json({
+      message: "User updated successfully.",
+      user: {
+        id: updatedUser.id,
+        username: updatedUser.username,
+        email: updatedUser.email,
+        name: updatedUser.name,
+        status: updatedUser.status,
+        loginAttempts: updatedUser.loginAttempts,
+        groupId: updatedUser.groupId,
+        updatedAt: updatedUser.updatedAt,
+      },
+    });
+
+  } catch (err: any) {
+    console.error(`Failed to edit user with ID ${req.params.id}: ${err.message}`);
+    res.status(500).json({ error: "unexpected_error", message: "An error occurred while updating the user." });
+  }
+};
+export const getUsers = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const users = await prisma.user.findMany({
+      select: {
+        id: true,
+        username: true,
+        name: true,
+        email: true,
+        info: true,
+        status: true,
+        loginAttempts: true,
+        createdAt: true,
+        updatedAt: true,
+       
+        group: {
+          select: {
+            id: true,
+            name: true
+          }
+        }
+      }
+    });
+
+    console.info("Fetched all users successfully");
+    res.status(200).json(users);
+  } catch (err: any) {
+    console.error("API get users error:", err.message);
+    res.status(500).json({ error: "Failed to fetch users", details: err.message });
+  }
+};
+
+export const deleteUser = async (req: Request, res: Response): Promise<void> => {
+    try {
+      // 1) Debug: Log session details (optional)
+      console.log("Session Data:", req.session);
+  
+      // 2) Confirm that the current user is logged in
+      const loggedInUserId = req.userId;
+      console.log("loggedInUserId:", loggedInUserId);
+      if (!loggedInUserId) {
+        res
+          .status(401)
+          .json({ error: "unauthorized", message: "User is not logged in" });
+        return;
+      }
+  
+      // 3) Extract the target user ID from URL params (e.g. DELETE /users/:id)
+      const { id } = req.params;
+      if (!id) {
+        res
+          .status(400)
+          .json({ error: "validation_error", message: "No user ID provided in params" });
+        return;
+      }
+  
+      // 4) Check if the user we want to delete actually exists
+      const existingUser = await prisma.user.findUnique({ where: { id } });
+      if (!existingUser) {
+        console.warn(`User with ID ${id} not found`);
+        res.status(404).json({ error: "not_found", message: "User not found" });
+        return;
+      }
+  
+      // 5) Optionally, check if the logged-in user has permission to delete
+      //    For example, only a SuperAdmin or deleting themselves
+      //    (Uncomment / adapt if you want some permission logic:)
+      // const isAdmin = await prisma.user.findFirst({
+      //   where: { id: loggedInUserId, groups: { some: { name: "SuperAdmin" } } },
+      // });
+      // if (!isAdmin && loggedInUserId !== id) {
+      //   return res
+      //     .status(403)
+      //     .json({ error: "forbidden", message: "No permission to delete this user" });
+      // }
+  
+      // 6) Delete the user by ID
+      await prisma.user.delete({ where: { id } });
+      console.info(`User deleted successfully: ${id}`);
+  
+      // 7) Return status 204 (No Content)
+      res.status(204).end();
+    } catch (err: any) {
+      console.error("Error deleting user:", err.message);
+      // If you have a custom handleError:
+      // handleError(res, err, "api delete user");
+      // else just do:
+      res.status(500).json({ error: "unexpected_error", message: err.message });
+    }
+  };
+
+export const getGroups = async (req: Request, res: Response): Promise<void> => {
+    try {
+          
+
+     
+       // Retrieve userId from session
+        const userId = req.userId;       console.log('userId:', userId);
+         const groups = await prisma.group.findMany();
+         console.info("Fetched all groups successfully");
+        res.status(200).json(groups);
+    } catch (err: any) {
+        console.error("api get groups: " + err.message);
+        handleError(res, err, "api get groups");
+    }
+};
+
+// Controller: Create Group
+export const createGroup = async (req: Request, res: Response): Promise<void> => {
+    try {
+          
+
+
+       // Retrieve userId from session
+        const userId = req.userId;       console.log('userId:', userId);
+
+        const { name } = req.body;
+
+        // Check if the group already exists
+        const existingGroup = await prisma.group.findUnique({ where: { name } });
+        if (existingGroup) {
+            console.warn(`Group creation failed: group "${name}" already exists`);
+            res.status(409).json({ error: "conflict_error", message: `Group "${name}" already exists` });
+            return;
+        }
+
+        const newGroup = await prisma.group.create({
+            data: { name },
+        });
+
+        console.info(`Group created successfully: ${newGroup.name}`);
+        res.status(201).json(newGroup);
+    } catch (err: any) {
+        console.error("api post groups: " + err.message);
+        handleError(res, err, "api post groups");
+    }
+};
+
+// Controller: Delete Group by ID
+export const deleteGroup = async (req: Request, res: Response): Promise<void> => {
+    try {
+
+       // Retrieve userId from session
+        const userId = req.userId;       console.log('userId:', userId);
+
+        await prisma.group.delete({ where: { id: Number(userId) } });
+        console.info(`Group deleted successfully: ${userId}`);
+        res.status(204).end();
+    } catch (err: any) {
+        console.error("api delete groups: " + err.message);
+        handleError(res, err, "api delete groups");
+    }
+};
+export const upsertTablePermission = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { userId, groupId, tableName, canRead, canCreate, canUpdate, canDelete } = req.body;
+
+    if (!tableName || (!userId && !groupId)) {
+      res.status(400).json({ error: 'validation_error', message: 'tableName and either userId or groupId are required' });
+      return;
+    }
+
+    const where = userId
+      ? { userId_tableName: { userId, tableName } }
+      : { groupId_tableName: { groupId, tableName } };
+
+    const data = {
+      tableName,
+      canRead: !!canRead,
+      canCreate: !!canCreate,
+      canUpdate: !!canUpdate,
+      canDelete: !!canDelete,
+      userId: userId || undefined,
+      groupId: groupId || undefined,
+    };
+
+    const permission = await prisma.tablePermission.upsert({
+      where,
+      update: data,
+      create: data,
+    });
+
+    res.status(200).json({ message: 'Table permission saved', permission });
+  } catch (error: any) {
+    console.error('Error upserting table permission:', error);
+    res.status(500).json({ error: 'unexpected_error', message: error.message });
+  }
+};
+
+// ✅ Create or Update Field Permission
+export const upsertFieldPermission = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { userId, groupId, tableName, fieldName, canRead, canUpdate } = req.body;
+
+    if (!tableName || !fieldName || (!userId && !groupId)) {
+      res.status(400).json({ error: 'validation_error', message: 'tableName, fieldName and either userId or groupId are required' });
+      return;
+    }
+
+    const where = userId
+      ? { userId_tableName_fieldName: { userId, tableName, fieldName } }
+      : { groupId_tableName_fieldName: { groupId, tableName, fieldName } };
+
+    const data = {
+      tableName,
+      fieldName,
+      canRead: !!canRead,
+      canUpdate: !!canUpdate,
+      userId: userId || undefined,
+      groupId: groupId || undefined,
+    };
+
+    const permission = await prisma.fieldPermission.upsert({
+      where,
+      update: data,
+      create: data,
+    });
+
+    res.status(200).json({ message: 'Field permission saved', permission });
+  } catch (error: any) {
+    console.error('Error upserting field permission:', error);
+    res.status(500).json({ error: 'unexpected_error', message: error.message });
+  }
+};
+
+
+
+
+
+
+
+/** ===========================
+ *        USER
+ * =========================== */
 // Controller: Sign in User
 
 export const login = (req: Request, res: Response, next: NextFunction): void => {
@@ -77,149 +443,6 @@ export const login = (req: Request, res: Response, next: NextFunction): void => 
     });
   })(req, res, next);
 };
-
-
-
-// Controller: Create User
-
-// export const createUser = async (req: Request, res: Response): Promise<void> => {
-//     try {
-        
-//         // Retrieve userId from session
-//          const userId = req.userId;   
-         
-
-//         if (!userId) {
-//             res.status(401).json({ error: 'unauthorized', message: 'User is not logged in' });
-//             return;
-//         }
-//         // Validate request body
-//         const { username, email, password, group } = req.body;
-
-//         if (!username || typeof username !== "string") {
-//             console.warn("Validation failed: username is missing or invalid");
-//             res.status(400).json({ error: "validation_error", message: "Valid username is required" });
-//             return;
-//         }
-
-    
-//         if (!email || typeof email !== "string" || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-//              console.warn("Validation failed: email is missing or invalid");
-//             res.status(400).json({ error: "validation_error", message: "Valid email is required" });
-//             return;
-//         }
-
-//         if (!password || typeof password !== "string" || password.length < 6) {
-//              console.warn("Validation failed: password is missing or too short");
-//             res.status(400).json({ error: "validation_error", message: "Password must be at least 6 characters long" });
-//             return;
-//         }
-
-//         if (!group || typeof group !== "string") {
-//              console.warn("Validation failed: group is missing or invalid");
-//             res.status(400).json({ error: "validation_error", message: "Valid group is required" });
-//             return;
-//         }
-
-      
-//         // Check if the user already exists
-//         const existingEmail = await prisma.user.findUnique({ where: { email } });
-//         if (existingEmail) {
-//              console.warn(`User creation failed: email "${email}" already exists`);
-//             res.status(409).json({ error: "conflict_error", message: `email "${email}" is already taken` });
-//             return;
-//         }
-
-//         const existingUser = await prisma.user.findUnique({ where: { username } });
-//         if (existingUser) {
-//              console.warn(`User creation failed: username "${username}" already exists`);
-//             res.status(409).json({ error: "conflict_error", message: `username "${username}" is already taken` });
-//             return;
-//         }
-
-//         // Check if the group exists
-//         const existingGroup = await prisma.group.findUnique({ where: { name: group } });
-//         if (!existingGroup) {
-//              console.warn(`User creation failed: group "${group}" does not exist`);
-//             res.status(404).json({ error: "not_found", message: `Group "${group}" does not exist` });
-//             return;
-//         }
-
-//         // Hash the password
-//         const hashedPassword = await bcrypt.hash(password, 10);
-
-//         // Create the new user
-//         const newUser = await prisma.user.create({
-//             data: {
-//                 username,
-//                 email,
-                
-//                 password: hashedPassword,
-//                 groupId: existingGroup.id,  // Set groupId directly
-//             },
-//         });
-
-//          console.info(`User created successfully: ${newUser.email}`);
-//         res.status(201).json({
-//             message: "User created successfully",
-//             user: {
-//                 id: newUser.id,
-//                 name:  newUser.name,
-//                 username: newUser.username,
-//                 email: newUser.email,
-//                 group: existingGroup.name,
-//             },
-//         });
-//     } catch (err: any) {
-//         console.error(`Failed to create user: ${err.message}`);
-//         handleError(res, err, "api create user");
-//     }
-// };
-export const createUser = async (req: Request, res: Response): Promise<void> => {
-  try {
-    const { email, password, group,  username } = req.body;
-
-    if (!email || !password) {
-      res.status(400).json({ error: "validation_error", message: "Email and password are required" });
-      return;
-    }
-
-    const existingEmail = await prisma.user.findUnique({ where: { email } });
-    if (existingEmail) {
-      res.status(409).json({ error: "conflict_error", message: `Email "${email}" is already taken` });
-      return;
-    }
-
-    const hashedPassword = await bcrypt.hash(password, 10);
-
-    let assignedGroup = await prisma.group.findUnique({ where: { name: group || "User" } });
-    if (!assignedGroup) {
-      assignedGroup = await prisma.group.create({ data: { name: group || "User" } });
-    }
-
-    const newUser = await prisma.user.create({
-      data: {
-        email,
-          username,
-        password: hashedPassword,
-        groupId: assignedGroup.id
-      }
-    });
-
-    res.status(201).json({
-      message: "User created successfully",
-      user: {
-        id: newUser.id,
-        email: newUser.email,
-        group: assignedGroup.name
-      }
-    });
-  } catch (err: any) {
-    console.error("Failed to create user:", err.message);
-    res.status(500).json({ error: "unexpected_error", message: err.message });
-  }
-};
-
 export const Register = async (req: Request, res: Response): Promise<void> => {
     try {
       const { username, email, password } = req.body;
@@ -436,100 +659,7 @@ export const logout = (req: Request, res: Response): void => {
     });
 };
 
-
-// Controller: Get all Users
-// export const getUsers = async (req: Request, res: Response): Promise<void> => {
-//     try {
-    
-
-//         // Retrieve userId from session
-//          const userId = req.userId;       
-//           console.log('userId:', userId);
-
-//         const users = await prisma.user.findMany({
-//             include: { group: true },
-//         });
-//          console.info("Fetched all users successfully");
-//         res.status(200).json(users);
-//     } catch (err: any) {
-//         console.error("api get users: " + err.message);
-//         handleError(res, err, "api get users");
-//     }
-// };
-export const getUsers = async (req: Request, res: Response): Promise<void> => {
-  try {
-    const users = await prisma.user.findMany({
-      select: {
-        id: true,
-        username: true,
-        name: true,
-        email: true,
-        info: true,
-        status: true,
-        loginAttempts: true,
-        createdAt: true,
-        updatedAt: true,
-       
-        group: {
-          select: {
-            id: true,
-            name: true
-          }
-        }
-      }
-    });
-
-    console.info("Fetched all users successfully");
-    res.status(200).json(users);
-  } catch (err: any) {
-    console.error("API get users error:", err.message);
-    res.status(500).json({ error: "Failed to fetch users", details: err.message });
-  }
-};
-
 // Controller: Get User by ID
-// export const getUser = async (req: Request, res: Response): Promise<void> => {
-//   try {
-//     const userId = req.userId;
-//     console.log('userId:', userId);
-
-//     if (!userId) {
-//       res.status(401).json({ error: 'Unauthorized', message: 'User is not logged in' });
-//       return;
-//     }
-
-//     const user = await prisma.user.findUnique({
-//       where: { id: String(userId) },
-//       select: {
-//         id: true,
-//         username: true,
-//         name: true,
-//         email: true,
-//         info: true,
-//         status: true,
-//         loginAttempts: true,
-//         createdAt: true,
-//         updatedAt: true,
-//         groupId: true,
-//         group: { select: { name: true } },
-//         permissions: { select: { action: true } }
-
-//       }
-//     });
-
-//     if (!user) {
-//       res.status(404).json({ error: 'User not found' });
-//       return;
-//     }
-
-//     console.info("Fetched user successfully");
-//     res.status(200).json(user);
-//   } catch (err: any) {
-//     console.error("api get user:", err.message);
-//     handleError(res, err, "api get user");
-//   }
-// };
-
 export const getUser = async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = req.userId;
@@ -555,18 +685,10 @@ export const getUser = async (req: Request, res: Response): Promise<void> => {
         group: {
           select: {
             name: true,
-            permissions: {
-              select: {
-                action: true
-              }
-            }
+           
           }
         },
-        permissions: {
-          select: {
-            action: true
-          }
-        }
+       
       }
     });
 
@@ -575,24 +697,15 @@ export const getUser = async (req: Request, res: Response): Promise<void> => {
       return;
     }
 
-    // ✅ Combine user's own permissions + role/group permissions
-    const groupPermissions = user.group?.permissions?.map(p => p.action) || [];
-    const userPermissions = user.permissions?.map(p => p.action) || [];
-
-    const allPermissions = Array.from(new Set([...groupPermissions, ...userPermissions]));
-
     res.status(200).json({
       ...user,
-      group: user.group?.name || null,
-      permissions: allPermissions
+      // group: user.group?.name || null,
     });
   } catch (err: any) {
     console.error("api get user:", err.message);
     res.status(500).json({ error: "unexpected_error", message: err.message });
   }
 };
-
-
 // Controller: Get My Profile
 export const getMyProfile = async (req: Request, res: Response): Promise<void> => {
     try {
@@ -650,122 +763,6 @@ export const getMyProfile = async (req: Request, res: Response): Promise<void> =
     }
 };
 
-
-// Controller: Edit User
-// export const editProfile = async (req: Request, res: Response): Promise<void> => {
-//   try {
-//     // Retrieve userId from session
-//     const userId = req.userId;
-//     console.log('userId:', userId);
-
-//     const { email, name, info, username, password, group } = req.body;
-
-//     // Check if the user exists
-//     const user = await prisma.user.findUnique({
-//       where: { id: String(userId) },
-//     });
-
-//     if (!user) {
-//       res.status(404).json({
-//         error: "not_found",
-//         message: `User with ID ${userId} not found.`,
-//       });
-//       return;
-//     }
-
-//     // Validation (conditionally apply for provided fields)
-//     const updateData: any = {};
-
-//     if (username !== undefined) {
-//       if (typeof username !== "string" || username.trim() === "") {
-//         console.warn("Validation failed: username is missing or invalid");
-//         res.status(400).json({ error: "validation_error", message: "Valid username is required" });
-//         return;
-//       }
-//       updateData.username = username;
-//     }
-
-//     if (email !== undefined) {
-//       if (typeof email !== "string" || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-//         console.warn("Validation failed: email is missing or invalid");
-//         res.status(400).json({ error: "validation_error", message: "Valid email is required" });
-//         return;
-//       }
-//       updateData.email = email;
-//     }
-
-//     if (password !== undefined) {
-//       if (typeof password !== "string" || password.length < 6) {
-//         console.warn("Validation failed: password is missing or too short");
-//         res.status(400).json({ error: "validation_error", message: "Password must be at least 6 characters long" });
-//         return;
-//       }
-//       updateData.password = await bcrypt.hash(password, 10);
-//     }
-
-//     if (group !== undefined) {
-//       if (typeof group !== "string" || group.trim() === "") {
-//         console.warn("Validation failed: group is missing or invalid");
-//         res.status(400).json({ error: "validation_error", message: "Valid group is required" });
-//         return;
-//       }
-//       const existingGroup = await prisma.group.findUnique({ where: { name: group } });
-//       if (!existingGroup) {
-//         res.status(404).json({ error: "not_found", message: `Group "${group}" does not exist.` });
-//         return;
-//       }
-//       updateData.groupId = existingGroup.id;
-//     }
-
-//     if (name !== undefined) {
-//       if (typeof name !== "string") {
-//         res.status(400).json({ error: "validation_error", message: "Name must be a valid string." });
-//         return;
-//       }
-//       updateData.name = name;
-//     }
-
-//     if (info !== undefined) {
-//       if (typeof info !== "string") {
-//         res.status(400).json({ error: "validation_error", message: "Info must be a valid string." });
-//         return;
-//       }
-//       updateData.info = info;
-//     }
-
-//     if (Object.keys(updateData).length === 0) {
-//       res.status(400).json({ error: "validation_error", message: "No valid fields provided for update." });
-//       return;
-//     }
-
-//     updateData.updatedAt = new Date();
-
-//     const updatedUser = await prisma.user.update({
-//       where: { id: String(userId) },
-//       data: updateData,
-//     });
-
-//   const sanitizedUser = {
-//   id: updatedUser.id,
-//   username: updatedUser.username,
-//   name: updatedUser.name,
-//   email: updatedUser.email,
-//   info: updatedUser.info,
-//   createdAt: updatedUser.createdAt,
-//   updatedAt: updatedUser.updatedAt,
-//   groupId: updatedUser.groupId
-// };
-
-// res.status(200).json({
-//   message: "User updated successfully.",
-//   user: sanitizedUser
-// });
-
-//   } catch (err: any) {
-//     console.error(`Failed to edit user: ${err.message}`);
-//     res.status(500).json({ error: "unexpected_error", message: "An error occurred while updating the user." });
-//   }
-// };
 export const editProfile = async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = req.userId;
@@ -825,316 +822,6 @@ export const editProfile = async (req: Request, res: Response): Promise<void> =>
   }
 };
 
-
-// export const editUser = async (req: Request, res: Response): Promise<void> => {
-//     try {
-//         const userId = req.userId; // The logged-in user making the request
-//         const { id } = req.params; // The ID of the user being edited
-//         const { email, name, info, username, password, group,status } = req.body;
-
-//         // 2️⃣ **Ensure user ID is provided**
-//         if (!id) {
-//             res.status(400).json({ error: "validation_error", message: "User ID is required." });
-//             return;
-//         }
-
-//         // 3️⃣ **Check if the user to edit exists**
-//         const user = await prisma.user.findUnique({ where: { id } });
-//         if (!user) {
-//             res.status(404).json({ error: "not_found", message: `User with ID ${id} not found.` });
-//             return;
-//         }
-
-//         // 4️⃣ **Check if the logged-in user is an admin OR editing their own account**
-//         const isAdmin = await prisma.user.findFirst({
-//             where: { id: userId, groupId: 1 },
-//         });
-
-//         if (!isAdmin && userId !== id) {
-//             res.status(403).json({ error: "forbidden", message: "You do not have permission to edit this user." });
-//             return;
-//         }
-
-//         // 5️⃣ **Validate and check if the group exists (only if provided)**
-//         let groupUpdate = {};
-//         if (group) {
-//             const existingGroup = await prisma.group.findUnique({ where: { name: group } });
-//             if (!existingGroup) {
-//                 res.status(404).json({ error: "not_found", message: `Group "${group}" does not exist.` });
-//                 return;
-//             }
-//             groupUpdate = { groups: { set: [{ id: existingGroup.id }] } }; // Set new group
-//         }
-
-
-
-//         // 6️⃣ **Hash password only if updating password**
-//         let hashedPassword = undefined;
-//         if (password) {
-//             if (password.length < 6) {
-//                 res.status(400).json({ error: "validation_error", message: "Password must be at least 6 characters long" });
-//                 return;
-//             }
-//             hashedPassword = await bcrypt.hash(password, 10);
-//         }
-
-//         // 7️⃣ **Update the user with provided fields**
-//         const updatedUser = await prisma.user.update({
-//             where: { id },
-//             data: {
-//                 email: email || undefined, 
-//                 name: name || undefined,
-//                 info: info || undefined,
-//                 status: status || undefined, // Update status if provided
-//                 username: username || undefined,
-//                 password: hashedPassword || undefined, // Update only if password is provided
-//                 ...groupUpdate, // Apply group update if necessary
-//                 updatedAt: new Date(),
-//             },
-//         });
-
-//         // 8️⃣ **Respond with success message**
-//         res.status(200).json({ message: "User updated successfully.", user: updatedUser });
-//     } catch (err: any) {
-//         console.error(`Failed to edit user with ID ${req.params.id}: ${err.message}`);
-//         res.status(500).json({ error: "unexpected_error", message: "An error occurred while updating the user." });
-//     }
-// };
-
-
-// Controller: Delete User
-export const editUser = async (req: Request, res: Response): Promise<void> => {
-  try {
-    const adminUserId = req.userId;
-    const { id } = req.params;
-    const { email, name, info, username, password, group, status } = req.body;
-
-    if (!id) {
-      res.status(400).json({ error: "validation_error", message: "User ID is required." });
-      return;
-    }
-
-    const user = await prisma.user.findUnique({ where: { id } });
-    if (!user) {
-      res.status(404).json({ error: "not_found", message: `User with ID ${id} not found.` });
-      return;
-    }
-
-    const isAdmin = await prisma.user.findFirst({ where: { id: adminUserId, groupId: 1 } });
-    if (!isAdmin && adminUserId !== id) {
-      res.status(403).json({ error: "forbidden", message: "You do not have permission to edit this user." });
-      return;
-    }
-
-    const updateData: any = {
-      email: email || undefined,
-      name: name || undefined,
-      info: info || undefined,
-      username: username || undefined,
-      updatedAt: new Date()
-    };
-
-    // Hash password if provided
-    if (password) {
-      if (password.length < 6) {
-        res.status(400).json({ error: "validation_error", message: "Password must be at least 6 characters long" });
-        return;
-      }
-      updateData.password = await bcrypt.hash(password, 10);
-    }
-
-    // Handle status update + loginAttempts reset if status is reactivated
-    if (status) {
-      updateData.status = status;
-      if (status === "active" && user.status === "suspended") {
-        updateData.loginAttempts = 0;
-      }
-    }
-
-    // Group update
-    if (group) {
-      const existingGroup = await prisma.group.findUnique({ where: { name: group } });
-      if (!existingGroup) {
-        res.status(404).json({ error: "not_found", message: `Group "${group}" does not exist.` });
-        return;
-      }
-      updateData.groupId = existingGroup.id;
-    }
-
-    const updatedUser = await prisma.user.update({
-      where: { id },
-      data: updateData,
-    });
-
-    res.status(200).json({
-      message: "User updated successfully.",
-      user: {
-        id: updatedUser.id,
-        username: updatedUser.username,
-        email: updatedUser.email,
-        name: updatedUser.name,
-        status: updatedUser.status,
-        loginAttempts: updatedUser.loginAttempts,
-        groupId: updatedUser.groupId,
-        updatedAt: updatedUser.updatedAt,
-      },
-    });
-
-  } catch (err: any) {
-    console.error(`Failed to edit user with ID ${req.params.id}: ${err.message}`);
-    res.status(500).json({ error: "unexpected_error", message: "An error occurred while updating the user." });
-  }
-};
-
-export const deleteUser = async (req: Request, res: Response): Promise<void> => {
-    try {
-      // 1) Debug: Log session details (optional)
-      console.log("Session Data:", req.session);
-  
-      // 2) Confirm that the current user is logged in
-      const loggedInUserId = req.userId;
-      console.log("loggedInUserId:", loggedInUserId);
-      if (!loggedInUserId) {
-        res
-          .status(401)
-          .json({ error: "unauthorized", message: "User is not logged in" });
-        return;
-      }
-  
-      // 3) Extract the target user ID from URL params (e.g. DELETE /users/:id)
-      const { id } = req.params;
-      if (!id) {
-        res
-          .status(400)
-          .json({ error: "validation_error", message: "No user ID provided in params" });
-        return;
-      }
-  
-      // 4) Check if the user we want to delete actually exists
-      const existingUser = await prisma.user.findUnique({ where: { id } });
-      if (!existingUser) {
-        console.warn(`User with ID ${id} not found`);
-        res.status(404).json({ error: "not_found", message: "User not found" });
-        return;
-      }
-  
-      // 5) Optionally, check if the logged-in user has permission to delete
-      //    For example, only a SuperAdmin or deleting themselves
-      //    (Uncomment / adapt if you want some permission logic:)
-      // const isAdmin = await prisma.user.findFirst({
-      //   where: { id: loggedInUserId, groups: { some: { name: "SuperAdmin" } } },
-      // });
-      // if (!isAdmin && loggedInUserId !== id) {
-      //   return res
-      //     .status(403)
-      //     .json({ error: "forbidden", message: "No permission to delete this user" });
-      // }
-  
-      // 6) Delete the user by ID
-      await prisma.user.delete({ where: { id } });
-      console.info(`User deleted successfully: ${id}`);
-  
-      // 7) Return status 204 (No Content)
-      res.status(204).end();
-    } catch (err: any) {
-      console.error("Error deleting user:", err.message);
-      // If you have a custom handleError:
-      // handleError(res, err, "api delete user");
-      // else just do:
-      res.status(500).json({ error: "unexpected_error", message: err.message });
-    }
-  };
-  
-// Controller: Get all Groups
-export const getGroups = async (req: Request, res: Response): Promise<void> => {
-    try {
-          
-
-     
-       // Retrieve userId from session
-        const userId = req.userId;       console.log('userId:', userId);
-         const groups = await prisma.group.findMany();
-         console.info("Fetched all groups successfully");
-        res.status(200).json(groups);
-    } catch (err: any) {
-        console.error("api get groups: " + err.message);
-        handleError(res, err, "api get groups");
-    }
-};
-
-// Controller: Create Group
-export const createGroup = async (req: Request, res: Response): Promise<void> => {
-    try {
-          
-
-
-       // Retrieve userId from session
-        const userId = req.userId;       console.log('userId:', userId);
-
-        const { name } = req.body;
-
-        // Check if the group already exists
-        const existingGroup = await prisma.group.findUnique({ where: { name } });
-        if (existingGroup) {
-            console.warn(`Group creation failed: group "${name}" already exists`);
-            res.status(409).json({ error: "conflict_error", message: `Group "${name}" already exists` });
-            return;
-        }
-
-        const newGroup = await prisma.group.create({
-            data: { name },
-        });
-
-        console.info(`Group created successfully: ${newGroup.name}`);
-        res.status(201).json(newGroup);
-    } catch (err: any) {
-        console.error("api post groups: " + err.message);
-        handleError(res, err, "api post groups");
-    }
-};
-
-// Controller: Delete Group by ID
-export const deleteGroup = async (req: Request, res: Response): Promise<void> => {
-    try {
-
-       // Retrieve userId from session
-        const userId = req.userId;       console.log('userId:', userId);
-
-        await prisma.group.delete({ where: { id: Number(userId) } });
-        console.info(`Group deleted successfully: ${userId}`);
-        res.status(204).end();
-    } catch (err: any) {
-        console.error("api delete groups: " + err.message);
-        handleError(res, err, "api delete groups");
-    }
-};
-
-export const assignPermissionsToRole = async (req: Request, res: Response): Promise<void> => {
-    try {
-        const { roleId, permissions } = req.body;
-
-        if (!roleId || !permissions || !Array.isArray(permissions)) {
-            res.status(400).json({ error: "invalid_request", message: "Invalid input data" });
-            return; // Add return to prevent further execution
-        }
-
-        // Update role permissions
-        await prisma.group.update({
-            where: { id: roleId },
-            data: {
-                permissions: {
-                    set: permissions.map((action: string) => ({ action })) // Explicitly define type
-                }
-            }
-        });
-
-        res.status(200).json({ message: "Permissions updated successfully" });
-    } catch (error) {
-        console.error("Failed to assign permissions:", error);
-        res.status(500).json({ error: "unexpected_error", message: "Failed to update permissions" });
-    }
-};
-
 export const forgotPassword = async (req: Request, res: Response): Promise<void> => {
   try {
     const { email } = req.body;
@@ -1169,15 +856,7 @@ export const forgotPassword = async (req: Request, res: Response): Promise<void>
   }
 };
 
-function handleError(res: Response, err: any, context: string): void {
-    if (err && err.code) {
-        res.status(400).json({ error: err.code, message: err.message });
-        console.error(`${context}: ${err.message}`);
-    } else {
-        res.status(400).json({ error: "unexpected_error", message: err });
-        console.error(`${context}: ${err}`);
-    }
-}
+
 export const resetPassword = async (req: Request, res: Response): Promise<void> => {
   try {
     const { email, otp, newPassword } = req.body;
@@ -1215,7 +894,6 @@ export const resetPassword = async (req: Request, res: Response): Promise<void> 
     res.status(500).json({ error: "unexpected_error", message: err.message });
   }
 };
-
 
 export const saveUserPreferences = async (req: Request, res: Response): Promise<void> => {
   try {
@@ -1261,9 +939,6 @@ export const saveUserPreferences = async (req: Request, res: Response): Promise<
   }
 };
 
-
-
-
 export const getUserPreferences = async (req: Request, res: Response): Promise<void> => {
   const userId = req.userId;
 
@@ -1302,3 +977,13 @@ export const getUserPreferences = async (req: Request, res: Response): Promise<v
     });
   }
 };
+
+function handleError(res: Response, err: any, context: string): void {
+    if (err && err.code) {
+        res.status(400).json({ error: err.code, message: err.message });
+        console.error(`${context}: ${err.message}`);
+    } else {
+        res.status(400).json({ error: "unexpected_error", message: err });
+        console.error(`${context}: ${err}`);
+    }
+}

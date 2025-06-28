@@ -9,7 +9,9 @@ import { v4 as uuidv4 } from 'uuid';
 export const uploadFile = async (req: Request, res: Response): Promise<void> => {
   try {
     console.log("📥 Upload request received.");
-    console.log("🧾 req.body:", req.body);
+  
+        console.log("🧾 req.body:", req.body);
+
     console.log("📎 req.files:", req.files);
 
     const file = (req.files as Express.Multer.File[])?.[0];
@@ -25,7 +27,8 @@ export const uploadFile = async (req: Request, res: Response): Promise<void> => 
       duration,
       folderId
     } = req.body;
-
+const typeOfAttachment = req.body.typeOfAttachment?.trim() || 'Unknown';
+  console.log("🧾 typeOfAttachment:", typeOfAttachment);
     // Get uploader ID from auth middleware
     const uploaderId = req.userId || null;
 
@@ -39,7 +42,7 @@ export const uploadFile = async (req: Request, res: Response): Promise<void> => 
     // Determine file type from extension
     const extension = path.extname(file.originalname).substring(1).toLowerCase();
     const type = extension;
-
+    
     // Generate UUID for attachment id
     const id = uuidv4();
 
@@ -63,7 +66,7 @@ export const uploadFile = async (req: Request, res: Response): Promise<void> => 
         uploaderId,
         folderId: folderId ? String(folderId) : null,
         type,
-        typeOfAttachment: 'AnotherFile', // Default type, can be changed later
+        typeOfAttachment,
         filePath: folderPath,
         filename_disk: filenameDisk,
         filename_download: filename_download || file.originalname,
@@ -499,30 +502,60 @@ export const getFullRfps = async (req: Request, res: Response): Promise<void> =>
 //         generalInfo: true,
 //         location: true,
 //         flowMeasurement: true,
-//         flowRegister: { include: { inventory: true, installation: true, maintenance: true } },
+//         flowRegister: {
+//           include: {
+//             inventory: true,
+//             installation: true,
+//             maintenance: true,
+//           },
+//         },
 //         data: true,
 //         maf: true,
+//         approvalDetails: true, // ✅ add this
 //         attachments: {
-//   select: { id: true, typeOfAttachment: true }
-// }
+//           select: {
+//             id: true,
+//             typeOfAttachment: true,
+//           },
+//         },
 //       },
 //     });
 
 //     if (!rfp) {
-//      res.status(404).json({ error: 'RFP not found' });
+//       res.status(404).json({ error: 'RFP not found' });
+//       return;
 //     }
 
-//     res.status(200).json(rfp);
+//     const groupedAttachments: Record<string, string[] | string> = {};
 
+//     for (const att of rfp.attachments) {
+//       const key = att.typeOfAttachment ?? 'Unknown';
+
+//       if (!(key in groupedAttachments)) {
+//         groupedAttachments[key] = att.id;
+//       } else {
+//         const current = groupedAttachments[key];
+//         groupedAttachments[key] = Array.isArray(current)
+//           ? [...current, att.id]
+//           : [current, att.id];
+//       }
+//     }
+
+//     const response = {
+//       ...rfp,
+//       attachments: [groupedAttachments],
+//     };
+
+//     res.status(200).json(response);
 //   } catch (err: any) {
 //     console.error('❌ getRfpById error:', err);
 //     res.status(500).json({ error: err.message || 'Internal server error' });
 //   }
 // };
-
 export const getRfpById = async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
+
     const rfp = await prisma.rfp.findUnique({
       where: { id: Number(id) },
       include: {
@@ -539,7 +572,7 @@ export const getRfpById = async (req: Request, res: Response): Promise<void> => 
         },
         data: true,
         maf: true,
-        approvalDetails: true, // ✅ add this
+        approvalDetails: true,
         attachments: {
           select: {
             id: true,
@@ -554,24 +587,20 @@ export const getRfpById = async (req: Request, res: Response): Promise<void> => 
       return;
     }
 
-    const groupedAttachments: Record<string, string[] | string> = {};
-
+    // Group attachments by typeOfAttachment
+    const groupedAttachments: Record<string, string[]> = {};
     for (const att of rfp.attachments) {
-      const key = att.typeOfAttachment ?? 'Unknown';
-
-      if (!(key in groupedAttachments)) {
-        groupedAttachments[key] = att.id;
-      } else {
-        const current = groupedAttachments[key];
-        groupedAttachments[key] = Array.isArray(current)
-          ? [...current, att.id]
-          : [current, att.id];
+      const key = att.typeOfAttachment || 'Unknown';
+      if (!groupedAttachments[key]) {
+        groupedAttachments[key] = [];
       }
+      groupedAttachments[key].push(att.id);
     }
 
+    // Prepare response by spreading RFP and replacing attachments with grouped structure
     const response = {
       ...rfp,
-      attachments: [groupedAttachments],
+      attachments: groupedAttachments,
     };
 
     res.status(200).json(response);
@@ -683,36 +712,7 @@ export const deleteFile = async (req: Request, res: Response): Promise<void> => 
     res.status(500).json({ error: 'Failed to delete file.', details: err.message });
   }
 };
-// export const getFilesByRfpId = async (req: Request, res: Response): Promise<void> => {
-//   try {
-//     const { rfpId } = req.params;
 
-//     if (!rfpId) {
-//       res.status(400).json({ error: 'rfpId parameter is required.' });
-//       return;
-//     }
-
-//     const attachments = await prisma.flowMeterAttachment.findMany({
-//       where: { rfpId: Number(rfpId) },
-//       orderBy: { uploadedAt: 'desc' }
-//     });
-
-//     if (!attachments || attachments.length === 0) {
-//       res.status(404).json({ message: 'No attachments found for the given RFP ID.' });
-//       return;
-//     }
-
-//     res.status(200).json({
-//       message: 'Attachments fetched successfully.',
-//       attachments
-//     });
-//     return;
-//   } catch (err: any) {
-//     console.error('❌ getFilesByRfpId error:', err);
-//     res.status(500).json({ error: 'Failed to fetch attachments.', details: err.message });
-//     return;
-//   }
-// };
 
 export const getFilesByRfpId = async (req: Request, res: Response): Promise<void> => {
   try {
