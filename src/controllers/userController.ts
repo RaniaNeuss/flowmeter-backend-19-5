@@ -3,6 +3,8 @@ import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 const prisma = new PrismaClient();
 import jwt, { SignOptions } from 'jsonwebtoken';
+import path from 'path';
+import fs from 'fs';
 
 import {   JWT_SECRET,
   REFRESH_SECRET,
@@ -1050,6 +1052,44 @@ export const getUserPreferences = async (req: Request, res: Response): Promise<v
   }
 };
 
+
+export const downloadAttachment = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+    console.log("📦 Requested file ID:", id);
+
+    const file = await prisma.flowMeterAttachment.findUnique({ where: { id } });
+    if (!file || !file.filename_disk) {
+      console.log("❌ File record not found or missing filename_disk:", id);
+      res.status(404).json({ error: "File not found or filename missing" });
+      return;
+    }
+
+    const uploadsDir = path.resolve(__dirname, '../../uploads');
+    const filePath = path.join(uploadsDir, file.filename_disk);
+    console.log("🗂 Full path to file:", filePath);
+
+    if (!fs.existsSync(filePath)) {
+      console.log("❌ File does not exist at path:", filePath);
+      res.status(404).json({ error: "File does not exist on disk" });
+      return;
+    }
+
+    const ext = path.extname(file.filename_download || file.filename_disk);
+    const mimeType = file.type || 'application/octet-stream';
+    const downloadName = file.filename_download || `file${ext}`;
+
+    res.setHeader("Content-Disposition", `attachment; filename="${downloadName}"`);
+    res.setHeader("Content-Type", mimeType);
+    console.log("📤 Sending file to client...");
+
+    const stream = fs.createReadStream(filePath);
+    stream.pipe(res);
+  } catch (err: any) {
+    console.error("🔥 Error in downloadAttachment:", err.message);
+    res.status(500).json({ error: "Internal server error", details: err.message });
+  }
+};
 function handleError(res: Response, err: any, context: string): void {
     if (err && err.code) {
         res.status(400).json({ error: err.code, message: err.message });

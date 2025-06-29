@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { getUsers,refreshtoken,sendOtpToUser,getAllPermissions, upsertTablePermission, upsertFieldPermission, getUserPreferences,  saveUserPreferences,verifyOtp,editUser,forgotPassword, resetPassword ,getMyProfile, Register,createUser, deleteUser, getGroups, createGroup, deleteGroup, getUser, login , authStatus ,logout,editProfile } from '../controllers/userController';
+import { getUsers,refreshtoken,sendOtpToUser,downloadAttachment,getAllPermissions, upsertTablePermission, upsertFieldPermission, getUserPreferences,  saveUserPreferences,verifyOtp,editUser,forgotPassword, resetPassword ,getMyProfile, Register,createUser, deleteUser, getGroups, createGroup, deleteGroup, getUser, login , authStatus ,logout,editProfile } from '../controllers/userController';
 import passport from "passport";
 import jwt from "jsonwebtoken";
 import { JWT_SECRET, REFRESH_SECRET } from "../lib/config";
@@ -125,6 +125,16 @@ router.post('/auth/verify-otp', verifyOtp);
  * =========================== */
 router.post('/forgot-password', forgotPassword);
 router.post('/reset-password', resetPassword);
+
+
+
+router.get('/files/:id', downloadAttachment);
+
+
+
+
+
+
 
 
 export default router;
