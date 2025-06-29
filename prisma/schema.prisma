@@ -22,7 +22,7 @@ model User {
   info      String?
   resetToken  String?  
   resetTokenExpiry DateTime?
-  status      UserStatus @default(pending)
+  status      UserStatus 
   otpCode     String?    
   otpExpiry   DateTime?
   loginAttempts Int      @default(0)
