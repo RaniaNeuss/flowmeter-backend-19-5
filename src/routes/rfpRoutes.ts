@@ -7,7 +7,7 @@ import {
   getFullRfps,
   getRfpById,getFileById,
  updateFile, deleteFile,
-  deleteRfp,uploadFile,getFilesByRfpId,updateFullRfp
+  deleteRfp,uploadFile,getDashboardStats,getFilesByRfpId,updateFullRfp
 } from '../controllers/rfpController';
 import { authenticateUser } from "../lib/authMiddleware";
 import { authorizeRoles } from '../lib/authorizeRoles';
@@ -19,6 +19,7 @@ router.post('/create',authenticateUser, authorizeRoles('SuperAdmin'),  createFul
 
 // Get all RFPs
 router.get('/full',authenticateUser, authorizeRoles('SuperAdmin'),  getFullRfps);
+router.get("/dashboard", authenticateUser, getDashboardStats);
 
 router.patch('/attachment/:id',authenticateUser, authorizeRoles('SuperAdmin'), updateFile);
 router.delete('/attachment/:id',authenticateUser, authorizeRoles('SuperAdmin'), deleteFile);

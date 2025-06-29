@@ -835,3 +835,21 @@ export const getFilteredRfps = async (req: Request, res: Response): Promise<void
     res.status(500).json({ error: err.message || 'Internal server error' });
   }
 };
+export const getDashboardStats = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const [rfpCount, userCount, deviceCount] = await Promise.all([
+      prisma.rfp.count(),
+      prisma.user.count(),
+      prisma.device.count(),
+    ]);
+
+    res.status(200).json({
+      rfpCount,
+      userCount,
+      connectionCount: deviceCount,
+    });
+  } catch (err: any) {
+    console.error("📉 Failed to fetch dashboard stats:", err);
+    res.status(500).json({ error: "Failed to fetch statistics", details: err.message });
+  }
+};
