@@ -503,60 +503,157 @@ export const connectODBCAndFetchData = async (req: Request, res: Response): Prom
 };
 
 
+// export const testDeviceConnection = async (req: Request, res: Response): Promise<void> => {
+//   try {
+//     const { type, property } = req.body;
+
+//     if (!type || !property) {
+//       res.status(400).json({ error: "Both 'type' and 'property' are required." });
+//       return;
+//     }
+
+//     if (type === "WebAPI") {
+//       const { address, method = "GET" } = property;
+
+//       if (!address) {
+//         res.status(400).json({ error: "API address is required for WebAPI devices." });
+//         return;
+//       }
+
+//       try {
+//         const response = await axios({ url: address, method });
+
+//         if (response.status >= 200 && response.status < 300) {
+//           console.log("✅ WebAPI connection successful!");
+//           res.status(200).json({ message: "WebAPI connection successful." });
+//         } else {
+//           console.error("⚠ API responded with status:", response.status);
+//           res.status(500).json({ error: `WebAPI responded with status ${response.status}` });
+//         }
+//       } catch (err) {
+//         console.error("❌ WebAPI connection failed:", err);
+//         res.status(500).json({ error: "WebAPI connection failed.", details: (err as Error).message });
+//       }
+//     } else if (type === "ODBC") {
+//       const { dsn } = property;
+
+//       if (!dsn) {
+//         res.status(400).json({ error: "DSN is required for ODBC connection." });
+//         return;
+//       }
+
+//       const connectionString = `DSN=${dsn};TrustServerCertificate=yes;`;
+
+//       try {
+//         const connection = await odbc.connect(connectionString.trim());
+//         console.log("✅ ODBC connection successful!");
+//         await connection.close();
+
+//         res.status(200).json({ message: "ODBC connection successful." });
+//       } catch (err: any) {
+//         console.error("❌ ODBC connection failed:", err.message);
+//         res.status(500).json({ error: "ODBC connection failed.", details: err.message });
+//       }
+//     } else {
+//       res.status(400).json({ error: `Unsupported device type '${type}'. Use 'WebAPI' or 'ODBC'.` });
+//     }
+//   } catch (err: any) {
+//     console.error("❌ testDeviceConnection error:", err);
+//     res.status(500).json({ error: "Internal server error.", details: err.message });
+//   }
+// };
+
+
+
 export const testDeviceConnection = async (req: Request, res: Response): Promise<void> => {
   try {
     const { type, property } = req.body;
 
     if (!type || !property) {
-      res.status(400).json({ error: "Both 'type' and 'property' are required." });
-      return;
+      return void res.status(400).json({ error: "Both 'type' and 'property' are required." });
     }
 
     if (type === "WebAPI") {
       const { address, method = "GET" } = property;
-
       if (!address) {
-        res.status(400).json({ error: "API address is required for WebAPI devices." });
-        return;
+        return void res.status(400).json({ error: "API address is required for WebAPI devices." });
       }
 
       try {
         const response = await axios({ url: address, method });
-
         if (response.status >= 200 && response.status < 300) {
           console.log("✅ WebAPI connection successful!");
-          res.status(200).json({ message: "WebAPI connection successful." });
+          return void res.status(200).json({ message: "WebAPI connection successful." });
         } else {
-          console.error("⚠ API responded with status:", response.status);
-          res.status(500).json({ error: `WebAPI responded with status ${response.status}` });
+          return void res.status(500).json({ error: `WebAPI responded with status ${response.status}` });
         }
       } catch (err) {
-        console.error("❌ WebAPI connection failed:", err);
-        res.status(500).json({ error: "WebAPI connection failed.", details: (err as Error).message });
+        return void res.status(500).json({ error: "WebAPI connection failed.", details: (err as Error).message });
       }
-    } else if (type === "ODBC") {
+    }
+
+    if (type === "ODBC") {
       const { dsn } = property;
-
       if (!dsn) {
-        res.status(400).json({ error: "DSN is required for ODBC connection." });
-        return;
+        return void res.status(400).json({ error: "DSN is required for ODBC connection." });
       }
-
-      const connectionString = `DSN=${dsn};TrustServerCertificate=yes;`;
 
       try {
-        const connection = await odbc.connect(connectionString.trim());
+        const connection = await odbc.connect(`DSN=${dsn};TrustServerCertificate=yes;`);
         console.log("✅ ODBC connection successful!");
         await connection.close();
-
-        res.status(200).json({ message: "ODBC connection successful." });
+        return void res.status(200).json({ message: "ODBC connection successful." });
       } catch (err: any) {
-        console.error("❌ ODBC connection failed:", err.message);
-        res.status(500).json({ error: "ODBC connection failed.", details: err.message });
+        return void res.status(500).json({ error: "ODBC connection failed.", details: err.message });
       }
-    } else {
-      res.status(400).json({ error: `Unsupported device type '${type}'. Use 'WebAPI' or 'ODBC'.` });
     }
+
+    if (type === "postgres") {
+      const { host, port, user, password, databaseName } = property;
+      if (!host || !port || !user || !password || !databaseName) {
+        return void res.status(400).json({ error: "Missing PostgreSQL connection fields." });
+      }
+
+      try {
+        const client = new PgClient({ host, port: Number(port), user, password, database: databaseName });
+        await client.connect();
+        const result = await client.query(`SELECT table_name FROM information_schema.tables WHERE table_schema = 'public'`);
+        const tables = result.rows.map(row => row.table_name);
+        await client.end();
+        return void res.status(200).json({ message: "PostgreSQL connected.", tables });
+      } catch (err: any) {
+        return void res.status(500).json({ error: "PostgreSQL connection failed.", details: err.message });
+      }
+    }
+
+    if (type === "mssql") {
+      const { host, port, user, password, databaseName } = property;
+      if (!host || !port || !user || !password || !databaseName) {
+        return void res.status(400).json({ error: "Missing MSSQL connection fields." });
+      }
+
+      try {
+        await sql.connect({
+          user,
+          password,
+          server: host,
+          database: databaseName,
+          port: Number(port),
+          options: {
+            encrypt: false,
+            trustServerCertificate: true,
+          },
+        });
+
+        const result = await sql.query(`SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_TYPE = 'BASE TABLE'`);
+        const tables = result.recordset.map((row: any) => row.TABLE_NAME);
+        return void res.status(200).json({ message: "MSSQL connected.", tables });
+      } catch (err: any) {
+        return void res.status(500).json({ error: "MSSQL connection failed.", details: err.message });
+      }
+    }
+
+    return void res.status(400).json({ error: `Unsupported device type '${type}'. Use 'WebAPI', 'ODBC', 'postgres', or 'mssql'.` });
   } catch (err: any) {
     console.error("❌ testDeviceConnection error:", err);
     res.status(500).json({ error: "Internal server error.", details: err.message });
