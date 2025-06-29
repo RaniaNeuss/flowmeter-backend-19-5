@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import {
     createDevice, connectODBCAndFetchData,
-     editDevice,deleteDevice,getDeviceById,getAllDevices, getDeviceTables, getDeviceTableData , testDeviceConnection,testWebAPIConnection,deleteManyDevices,deleteAllDevices
+     editDevice,deleteDevice,getDeviceById,getAllDevices,getDeviceTableFeilds, getDeviceTables, getDeviceTableData , testDeviceConnection,testWebAPIConnection,deleteManyDevices,deleteAllDevices
 } from '../controllers/deviceController';
 import { authenticateUser } from "../lib/authMiddleware";
 import { authorizeRoles } from '../lib/authorizeRoles';
@@ -22,5 +22,6 @@ router.post('/odbc-connect', connectODBCAndFetchData);
  router.delete('/:id',authenticateUser, authorizeRoles('SuperAdmin'), deleteDevice);
 router.get('/:deviceId/tables', getDeviceTables);
 router.get('/:deviceId/tables/:tableName/data', getDeviceTableData);
+router.post('/:deviceId/tables/:tableName/data', getDeviceTableFeilds);
 
 export default router;

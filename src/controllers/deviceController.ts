@@ -211,6 +211,64 @@ export const getDeviceTableData = async (req: Request, res: Response): Promise<v
   }
 };
 
+export const getDeviceTableFeilds = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { deviceId, tableName } = req.params;
+    const { fields } = req.body; // Now coming from POST body
+
+    const device = await prisma.device.findUnique({ where: { id: deviceId } });
+    if (!device) return void res.status(404).json({ error: 'Device not found' });
+
+    const property = device.property ? JSON.parse(device.property) : {};
+    const { dbType, host, port, user, password, databaseName } = property;
+
+    if (!dbType || !host || !user || !password || !databaseName) {
+      return void res.status(400).json({ error: 'Missing database credentials in device config.' });
+    }
+
+    if (!tableName) {
+      return void res.status(400).json({ error: 'Table name is required.' });
+    }
+
+    let data: any[] = [];
+    let selectedFields = '*';
+
+    if (fields && Array.isArray(fields) && fields.length > 0) {
+      const cleanFields = fields
+        .map((f: string) => f.trim())
+        .filter(Boolean)
+        .map(f => dbType === 'postgres' ? `"${f}"` : `[${f}]`)
+        .join(', ');
+      selectedFields = cleanFields;
+    }
+
+    if (dbType === 'postgres') {
+      const client = new PgClient({ host, port: Number(port), user, password, database: databaseName });
+      await client.connect();
+      const result = await client.query(`SELECT ${selectedFields} FROM "${tableName}"`);
+      data = result.rows;
+      await client.end();
+    } else if (dbType === 'mssql') {
+      await sql.connect({
+        user,
+        password,
+        server: host,
+        database: databaseName,
+        port: Number(port),
+        options: { encrypt: false, trustServerCertificate: true },
+      });
+      const result = await sql.query(`SELECT ${selectedFields} FROM [${tableName}]`);
+      data = result.recordset;
+    } else {
+      return void res.status(400).json({ error: `Unsupported dbType '${dbType}'` });
+    }
+
+    res.status(200).json({ table: tableName, rowCount: data.length, data });
+  } catch (err: any) {
+    console.error("❌ Error fetching table data:", err);
+    res.status(500).json({ error: 'Failed to fetch table data.', details: err.message });
+  }
+};
 
 
 /**
