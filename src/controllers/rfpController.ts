@@ -711,12 +711,7 @@ export const getRfpById = async (req: Request, res: Response): Promise<void> => 
         data: true,
         maf: true,
         approvalDetails: true,
-        attachments: {
-          select: {
-            id: true,
-            typeOfAttachment: true,
-          },
-        },
+        attachments: true,
       },
     });
 
@@ -726,16 +721,31 @@ export const getRfpById = async (req: Request, res: Response): Promise<void> => 
     }
 
     // Group attachments by typeOfAttachment
-    const groupedAttachments: Record<string, string[]> = {};
+    const groupedAttachments: Record<
+      string,
+      {
+        id: string;
+        type: string | null;
+        filename_download: string | null;
+        size: number | null;
+        uploadedAt?: Date;
+      }[]
+    > = {};
+
     for (const att of rfp.attachments) {
       const key = att.typeOfAttachment || 'Unknown';
       if (!groupedAttachments[key]) {
         groupedAttachments[key] = [];
       }
-      groupedAttachments[key].push(att.id);
+      groupedAttachments[key].push({
+        id: att.id,
+        type: att.type || null,
+        filename_download: att.filename_download || null,
+        size: att.filesize || null,
+        uploadedAt: att.uploadedAt || undefined,
+      });
     }
 
-    // Prepare response by spreading RFP and replacing attachments with grouped structure
     const response = {
       ...rfp,
       attachments: groupedAttachments,
@@ -747,6 +757,7 @@ export const getRfpById = async (req: Request, res: Response): Promise<void> => 
     res.status(500).json({ error: err.message || 'Internal server error' });
   }
 };
+
 
 export const deleteRfp = async (req: Request, res: Response): Promise<void> => {
   try {

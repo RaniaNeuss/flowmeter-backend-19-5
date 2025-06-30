@@ -38,7 +38,7 @@ export function authorizeRoles(Role: string) {
         if (!hasRole) {
           res.status(403).json({
             error: "forbidden",
-            message: `only ${user.group?.name} allowed to make changes:}`,
+            message: `only Admins allowed to make changes:}`,
           });
           return;
         }

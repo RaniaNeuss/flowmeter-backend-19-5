@@ -48,7 +48,7 @@ model UserPreference {
   updatedAt  DateTime @updatedAt
     @@unique([userId, tableName]) // 👈 Add this line
 
-  user        User      @relation("UserPreferenceRelation", fields: [userId], references: [id]) // ✅ Add relation name
+  user        User      @relation("UserPreferenceRelation", fields: [userId], references: [id],onDelete: Cascade) // ✅ Add relation name
 }
 
 model Group {
@@ -71,8 +71,8 @@ model TablePermission {
   canUpdate  Boolean  @default(false)
   canDelete  Boolean  @default(false)
 
-    user       User?    @relation("UserTablePermissions", fields: [userId], references: [id])
-  group      Group?   @relation("GroupTablePermissions", fields: [groupId], references: [id])
+    user       User?    @relation("UserTablePermissions", fields: [userId], references: [id], onDelete: Cascade)
+  group      Group?   @relation("GroupTablePermissions", fields: [groupId], references: [id], onDelete: Cascade)
   @@unique([userId, tableName])
 @@unique([groupId, tableName])
 }
@@ -86,8 +86,8 @@ model FieldPermission {
   canRead     Boolean @default(false)
   canUpdate   Boolean @default(false)
 
-    user        User?   @relation("UserFieldPermissions", fields: [userId], references: [id])
-  group       Group?  @relation("GroupFieldPermissions", fields: [groupId], references: [id])
+    user        User?   @relation("UserFieldPermissions", fields: [userId], references: [id], onDelete: Cascade)
+  group       Group?  @relation("GroupFieldPermissions", fields: [groupId], references: [id], onDelete: Cascade)
 
   @@unique([userId, tableName, fieldName])
 @@unique([groupId, tableName, fieldName])
@@ -117,7 +117,7 @@ model LocationType {
   id    Int    @id @default(autoincrement())
   rfpId Int    @unique
   type  String
-  rfp   Rfp    @relation(fields: [rfpId], references: [id])
+  rfp   Rfp    @relation(fields: [rfpId], references: [id], onDelete: Cascade)
 }
 
 model GeneralInfo {
@@ -281,11 +281,11 @@ model FlowMeterAttachment {
 
 
 
-  updatedBy         User?    @relation("Updater", fields: [updatedById], references: [id])
+  updatedBy         User?    @relation("Updater", fields: [updatedById], references: [id], onDelete: Cascade)
   updatedById       String?  // NEW field for tracking who updated
 
   uploaderId       String?  // new
-  uploader         User?    @relation(fields: [uploaderId], references: [id])
+  uploader         User?    @relation(fields: [uploaderId], references: [id], onDelete: Cascade)
   rfp Rfp? @relation(fields: [rfpId], references: [id], onDelete: Cascade)
 }
 
