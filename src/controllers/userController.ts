@@ -445,6 +445,7 @@ export const deleteTablePermission = async (req: Request, res: Response): Promis
 
 
 
+
 /** ===========================
  *        USER
  * =========================== */
@@ -454,9 +455,13 @@ export const login = (req: Request, res: Response, next: NextFunction): void => 
   passport.authenticate("local", async (err: any, user: any, info: any) => {
     if (err) return res.status(500).json({ message: "Internal server error" });
     if (!user) return res.status(401).json({ message: info?.message || "Invalid email or password" });
+
    if (user.status === "pending") {
       return res.status(403).json({ message: "Your account is not verified. Please check your email for the OTP." });
     }
+     if (user.status === "suspended") {
+           return res.status(403).json({ message: "Account is suspended. Contact support." });
+        }
     req.logIn(user, (loginErr) => {
       if (loginErr) return res.status(500).json({ message: "Login failed" });
 
