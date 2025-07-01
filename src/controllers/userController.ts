@@ -454,7 +454,9 @@ export const login = (req: Request, res: Response, next: NextFunction): void => 
   passport.authenticate("local", async (err: any, user: any, info: any) => {
     if (err) return res.status(500).json({ message: "Internal server error" });
     if (!user) return res.status(401).json({ message: info?.message || "Invalid email or password" });
-
+   if (user.status === "pending") {
+      return res.status(403).json({ message: "Your account is not verified. Please check your email for the OTP." });
+    }
     req.logIn(user, (loginErr) => {
       if (loginErr) return res.status(500).json({ message: "Login failed" });
 
