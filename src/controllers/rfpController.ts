@@ -630,66 +630,6 @@ export const getFullRfps = async (req: Request, res: Response): Promise<void> =>
   }
 };
 
-// export const getRfpById = async (req: Request, res: Response): Promise<void> => {
-//   try {
-//     const { id } = req.params;
-//     const rfp = await prisma.rfp.findUnique({
-//       where: { id: Number(id) },
-//       include: {
-//         LocationType: true,
-//         generalInfo: true,
-//         location: true,
-//         flowMeasurement: true,
-//         flowRegister: {
-//           include: {
-//             inventory: true,
-//             installation: true,
-//             maintenance: true,
-//           },
-//         },
-//         data: true,
-//         maf: true,
-//         approvalDetails: true, // ✅ add this
-//         attachments: {
-//           select: {
-//             id: true,
-//             typeOfAttachment: true,
-//           },
-//         },
-//       },
-//     });
-
-//     if (!rfp) {
-//       res.status(404).json({ error: 'RFP not found' });
-//       return;
-//     }
-
-//     const groupedAttachments: Record<string, string[] | string> = {};
-
-//     for (const att of rfp.attachments) {
-//       const key = att.typeOfAttachment ?? 'Unknown';
-
-//       if (!(key in groupedAttachments)) {
-//         groupedAttachments[key] = att.id;
-//       } else {
-//         const current = groupedAttachments[key];
-//         groupedAttachments[key] = Array.isArray(current)
-//           ? [...current, att.id]
-//           : [current, att.id];
-//       }
-//     }
-
-//     const response = {
-//       ...rfp,
-//       attachments: [groupedAttachments],
-//     };
-
-//     res.status(200).json(response);
-//   } catch (err: any) {
-//     console.error('❌ getRfpById error:', err);
-//     res.status(500).json({ error: err.message || 'Internal server error' });
-//   }
-// };
 export const getRfpById = async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
@@ -711,7 +651,16 @@ export const getRfpById = async (req: Request, res: Response): Promise<void> => 
         data: true,
         maf: true,
         approvalDetails: true,
-        attachments: true,
+        attachments: {
+          select: {
+            id: true,
+            
+            typeOfAttachment: true,
+            filename_download: true,
+            type: true,
+         
+          },
+        },
       },
     });
 
@@ -721,34 +670,25 @@ export const getRfpById = async (req: Request, res: Response): Promise<void> => 
     }
 
     // Group attachments by typeOfAttachment
-    const groupedAttachments: Record<
-      string,
-      {
-        id: string;
-        type: string | null;
-        filename_download: string | null;
-        size: number | null;
-        uploadedAt?: Date;
-      }[]
-    > = {};
+  const groupedAttachments: Record<string, string[]> = {};
+const attachmentMeta: Record<string, string> = {};
 
-    for (const att of rfp.attachments) {
-      const key = att.typeOfAttachment || 'Unknown';
-      if (!groupedAttachments[key]) {
-        groupedAttachments[key] = [];
-      }
-      groupedAttachments[key].push({
-        id: att.id,
-        type: att.type || null,
-        filename_download: att.filename_download || null,
-        size: att.filesize || null,
-        uploadedAt: att.uploadedAt || undefined,
-      });
-    }
+for (const att of rfp.attachments) {
+  const key = att.typeOfAttachment || "Unknown";
+  if (!groupedAttachments[key]) {
+    groupedAttachments[key] = [];
+  }
 
+  groupedAttachments[key].push(att.id);
+  attachmentMeta[att.id] = att.filename_download ?? "";
+}
+
+
+    // Prepare response by spreading RFP and replacing attachments with grouped structure
     const response = {
       ...rfp,
       attachments: groupedAttachments,
+attachmentMeta      
     };
 
     res.status(200).json(response);
@@ -758,6 +698,77 @@ export const getRfpById = async (req: Request, res: Response): Promise<void> => 
   }
 };
 
+
+
+
+
+// export const getRfpById = async (req: Request, res: Response): Promise<void> => {
+//   try {
+//     const { id } = req.params;
+
+//     const rfp = await prisma.rfp.findUnique({
+//       where: { id: Number(id) },
+//       include: {
+//         LocationType: true,
+//         generalInfo: true,
+//         location: true,
+//         flowMeasurement: true,
+//         flowRegister: {
+//           include: {
+//             inventory: true,
+//             installation: true,
+//             maintenance: true,
+//           },
+//         },
+//         data: true,
+//         maf: true,
+//         approvalDetails: true,
+//         attachments: true,
+//       },
+//     });
+
+//     if (!rfp) {
+//       res.status(404).json({ error: 'RFP not found' });
+//       return;
+//     }
+
+//     // Group attachments by typeOfAttachment
+//     const groupedAttachments: Record<
+//       string,
+//       {
+//         id: string;
+//         type: string | null;
+//         filename_download: string | null;
+//         size: number | null;
+//         uploadedAt?: Date;
+//       }[]
+//     > = {};
+
+//     for (const att of rfp.attachments) {
+//       const key = att.typeOfAttachment || 'Unknown';
+//       if (!groupedAttachments[key]) {
+//         groupedAttachments[key] = [];
+//       }
+//       groupedAttachments[key].push({
+//         id: att.id,
+//         type: att.type || null,
+//         filename_download: att.filename_download || null,
+//         size: att.filesize || null,
+//         uploadedAt: att.uploadedAt || undefined,
+//       });
+//     }
+
+//     const response = {
+//       ...rfp,
+//       attachments: groupedAttachments,
+//     };
+
+//     res.status(200).json(response);
+//   } catch (err: any) {
+//     console.error('❌ getRfpById error:', err);
+//     res.status(500).json({ error: err.message || 'Internal server error' });
+//   }
+// };
 
 export const deleteRfp = async (req: Request, res: Response): Promise<void> => {
   try {
