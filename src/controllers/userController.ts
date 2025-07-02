@@ -462,9 +462,29 @@ export const login = (req: Request, res: Response, next: NextFunction): void => 
      if (user.status === "suspended") {
            return res.status(403).json({ message: "Account is suspended. Contact support." });
         }
-    req.logIn(user, (loginErr) => {
+     req.logIn(user, async (loginErr) => {
       if (loginErr) return res.status(500).json({ message: "Login failed" });
 
+      const dbUser = await prisma.user.findUnique({
+        where: { id: user.id },
+        include: {
+          tablePermissions: true,
+          group: {
+            include: { tablePermissions: true },
+          },
+        },
+      });
+       const permissions = [...(dbUser?.tablePermissions ?? []), ...(dbUser?.group?.tablePermissions ?? [])];
+const tablePermissions = permissions.reduce((acc, perm) => {
+        if (!acc[perm.tableName]) {
+          acc[perm.tableName] = { canRead: false, canCreate: false, canUpdate: false, canDelete: false };
+        }
+        acc[perm.tableName].canRead ||= perm.canRead;
+        acc[perm.tableName].canCreate ||= perm.canCreate;
+        acc[perm.tableName].canUpdate ||= perm.canUpdate;
+        acc[perm.tableName].canDelete ||= perm.canDelete;
+        return acc;
+      }, {} as Record<string, { canRead: boolean; canCreate: boolean; canUpdate: boolean; canDelete: boolean }>);
       req.session.userId = user.id;
 
       const token = jwt.sign(
@@ -501,8 +521,9 @@ export const login = (req: Request, res: Response, next: NextFunction): void => 
     id: user.id,
     email: user.email,
     group: {
-      name: user.group.name
-    }
+      name: user.group.name,
+    } ,       permissions: tablePermissions,
+
   },
   // token,
   // refreshToken,
@@ -511,6 +532,11 @@ export const login = (req: Request, res: Response, next: NextFunction): void => 
     });
   })(req, res, next);
 };
+
+
+
+
+
 export const Register = async (req: Request, res: Response): Promise<void> => {
     try {
       const { username, email, password } = req.body;
