@@ -37,6 +37,7 @@ function HTTPclient(_data, _logger, _events, _runtime, prisma, io) {
     if (!device || device.id !== deviceId) {
       device = await prisma.device.findUnique({
         where: { id: deviceId },
+         include: { tags: true },
         
       });
       logger.info(`Fetched device: ${device ? device.name : 'NULL'}`);
@@ -129,7 +130,7 @@ function HTTPclient(_data, _logger, _events, _runtime, prisma, io) {
    */
   this.polling = async function (deviceId) {
     const formattedTime = new Date().toLocaleTimeString('en-US', { hour12: false });
-    logger.info(`Polling started @ ${formattedTime} for device '${data.name}' / ID: ${deviceId}`);
+    // logger.info(`Polling started @ ${formattedTime} for device '${data.name}' / ID: ${deviceId}`);
 
     // FIXED: We no longer require `connected === true` here, because we want
     // to attempt a poll even if we’re offline (in case we come back online).
@@ -329,10 +330,11 @@ function HTTPclient(_data, _logger, _events, _runtime, prisma, io) {
     // Re-fetch device just once to get all tags for address->id mapping
     const dev = await prisma.device.findUnique({
       where: { id: deviceId },
+       include: { tags: true },
      
     });
     if (!dev) {
-      console.error(`Device '${deviceId}' not found in _updateVarsValue.`);
+      // console.error(`Device '${deviceId}' not found in _updateVarsValue.`);
       return {};
     }
   
@@ -414,7 +416,7 @@ function HTTPclient(_data, _logger, _events, _runtime, prisma, io) {
 
   const _emitValues = function (valuesObj, deviceId) {
     events.emit('device-value:changed', { id: deviceId, values: valuesObj });
-    logger.info(`device-value:changed => { id: ${deviceId}, values: ... }`);
+    // logger.info(`device-value:changed => { id: ${deviceId}, values: ... }`);
   };
 
   /**

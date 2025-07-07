@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import {
-    createDevice, connectODBCAndFetchData,
-     editDevice,deleteDevice,getDeviceById,getAllDevices,getDeviceTableFeilds, getDeviceTables, getDeviceTableData , testDeviceConnection,testWebAPIConnection,deleteManyDevices,deleteAllDevices
+    createDevice,
+     editDevice,deleteDevice,getDeviceById,getAllDevices,fetchAndWriteToInflux,getDeviceTableFeilds, getDeviceTables, getDeviceTableData , testDeviceConnection,testWebAPIConnection,deleteManyDevices,deleteAllDevices
 } from '../controllers/deviceController';
 import { authenticateUser } from "../lib/authMiddleware";
 import { authorizeRoles } from '../lib/authorizeRoles';
@@ -12,7 +12,8 @@ const router = Router();
 router.post('/create',authenticateUser,checkTablePermission("Devices", "canCreate"),createDevice); // POST /api/devices/create
 router.post("/testconnection", testWebAPIConnection);
 router.post("/test-connection", testDeviceConnection);
-router.post('/odbc-connect', connectODBCAndFetchData);
+router.post('/:id/fetch-and-write', fetchAndWriteToInflux);
+
 // Edit an existing device
  router.put('/:id',authenticateUser,checkTablePermission("Devices", "canUpdate"),editDevice); // PUT /api/devices/edit/:id
  router.get('/',authenticateUser,checkTablePermission("Devices", "canRead"), getAllDevices); 

@@ -317,6 +317,60 @@ export const deleteGroup = async (req: Request, res: Response): Promise<void> =>
         handleError(res, err, "api delete groups");
     }
 };
+
+
+export const createGroupWithPermissions = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { name, permissions } = req.body;
+
+    // 1. Validation
+    if (!name || typeof name !== "string") {
+       res.status(400).json({ error: "validation_error", message: "Group name is required." });
+       return;
+    }
+
+    if (!Array.isArray(permissions)) {
+      res.status(400).json({ error: "validation_error", message: "Permissions must be an array." });
+       return
+    }
+
+    // 2. Check for duplicate group
+    const existingGroup = await prisma.group.findUnique({ where: { name } });
+    if (existingGroup) {
+     res.status(409).json({ error: "conflict_error", message: `Group "${name}" already exists` });
+      return ;
+    }
+
+    // 3. Create group and assign permissions
+    const newGroup = await prisma.group.create({
+      data: {
+        name,
+        tablePermissions: {
+          create: permissions.map((perm: any) => ({
+            tableName: perm.tableName,
+            canRead: !!perm.canRead,
+            canCreate: !!perm.canCreate,
+            canUpdate: !!perm.canUpdate,
+            canDelete: !!perm.canDelete,
+          })),
+        },
+      },
+      include: {
+        tablePermissions: true,
+      },
+    });
+
+    res.status(201).json({ message: "Group and permissions created", group: newGroup });
+  } catch (err: any) {
+    console.error("Error in createGroupWithPermissions:", err);
+    res.status(500).json({ error: "unexpected_error", message: err.message });
+  }
+};
+
+
+
+
+
 export const upsertTablePermission = async (req: Request, res: Response): Promise<void> => {
   try {
     const { userId, groupId, tableName, canRead, canCreate, canUpdate, canDelete } = req.body;

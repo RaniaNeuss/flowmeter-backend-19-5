@@ -289,6 +289,15 @@ model FlowMeterAttachment {
   rfp Rfp? @relation(fields: [rfpId], references: [id], onDelete: Cascade)
 }
 
+model DeviceTable {
+  id        Int      @id @default(autoincrement())
+  deviceId  String
+  tableName String
+
+  device    Device   @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+
+  @@unique([deviceId, tableName])
+}
 
 model Device {
   id            String    @id @default(uuid())
@@ -302,8 +311,25 @@ model Device {
   lastConnected DateTime?
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
-}
+   tags          Tag[]     @relation("DeviceTags")
+   tables DeviceTable[]
 
+}
+model Tag {
+  id         String   @id @default(uuid())
+  name       String? 
+  address      String? 
+  value      String?
+  label      String?
+  type       String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @default(now())
+  deviceId   String
+  bitmask    Int? 
+  device     Device   @relation(fields: [deviceId], references: [id], onDelete: Cascade, name: "DeviceTags")
+  @@unique([deviceId,address]) // Ensure tags are unique within the scope of a device
+
+}
 model Settings {
   id                   String   @id @default(uuid())
   system               String?

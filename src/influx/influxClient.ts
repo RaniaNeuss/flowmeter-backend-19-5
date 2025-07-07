@@ -1,8 +1,8 @@
 import { InfluxDB , Point} from "@influxdata/influxdb-client";
 
 // InfluxDB Configuration
-const influxUrl = "http://217.160.33.154:8086";
-const influxToken = "zeRdN9WOVvE-VatFubAk2L3mPiHoLwIvGCpefaMGfHZu2a96MJ8H_Z3swhMvSakOqZ6qdcADTDHxnWckohEqtA==";
+const influxUrl = "https://us-east-1-1.aws.cloud2.influxdata.com/";
+const influxToken = "K8gsItrTCSM5tBHLHacOK1Gd1r-T1Cm8hl5VghFGknGuc4enzzhqsTAbVJZlACvH4XTJus6PKjOCDAsFKumSNw==";
 const org = "neuss";
 const bucket = "test2";
 
