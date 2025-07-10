@@ -7,7 +7,7 @@ import prisma from './prismaClient'; // Import Prisma Client
 import initializeSocket from './socket'; // Import Socket Initialization
 import rfpRoutes from './routes/rfpRoutes';
 import { PORT } from "./lib/config";
-import flowRoute from './routes/flowRoute';
+
 import deviceManager from './runtime/devices/deviceManager';
 import userRoutes from './routes/userRoutes';
 import deviceRoutes from './routes/deviceRoutes';
@@ -42,8 +42,6 @@ app.use(passport.session());
 // Routes
 app.use('/api/users', userRoutes);
 app.use('/api/rfp', rfpRoutes);
-app.use('/api/influx', flowRoute);
-app.use('/api/sewage', flowRoute);
 app.use('/api/users', userRoutes);
 app.use('/api/devices', deviceRoutes);
 // Initialize Socket.IO

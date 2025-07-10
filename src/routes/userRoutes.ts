@@ -1,10 +1,10 @@
 import { Router } from 'express';
-import { getUsers,refreshtoken,createGroupWithPermissions,sendOtpToUser,downloadAttachment,getAllPermissions, upsertTablePermission, upsertFieldPermission, getUserPreferences,  saveUserPreferences,verifyOtp,editUser,forgotPassword, resetPassword ,getMyProfile, Register,createUser, deleteUser, getGroups, createGroup, deleteGroup, getUser, login , authStatus ,logout,editProfile } from '../controllers/userController';
+import { getUsers,refreshtoken,updateGroup,createGroupWithPermissions,sendOtpToUser,downloadAttachment,getAllPermissions, upsertTablePermission, upsertFieldPermission, getUserPreferences,  saveUserPreferences,verifyOtp,editUser,forgotPassword, resetPassword ,getMyProfile, Register,createUser, deleteUser, getGroups, createGroup, deleteGroup, getUser, login , authStatus ,logout,editProfile } from '../controllers/userController';
 import passport from "passport";
 import jwt from "jsonwebtoken";
 import { JWT_SECRET, REFRESH_SECRET } from "../lib/config";
 import { authorizeRoles } from '../lib/authorizeRoles';
-import { UserStatus } from "@prisma/client"; // 👈 import the enum
+import prisma from '../prismaClient';
 import { authenticateUser } from "../lib/authMiddleware";
 import { Request, Response, NextFunction } from "express";
 
@@ -16,22 +16,22 @@ declare module "express-session" {
     }
 }
 
-interface User {
-    id: string;
-    username: string;
-    password: string;
-    name: string | null;
-    email: string;
-    otpCode:string | null;
-    otpExpiry :Date | null;
-    info: string | null;
-    createdAt: Date;
-    loginAttempts: number;
-    updatedAt: Date; 
-    status: UserStatus;
-    resetToken : string| null;  // <-- Add this
-  resetTokenExpiry: Date | null; // <-- Add this
-  }
+// interface User {
+//     id: string;
+//     username: string;
+//     password: string;
+//     name: string | null;
+//     email: string;
+//     otpCode:string | null;
+//     otpExpiry :Date | null;
+//     info: string | null;
+//     createdAt: Date;
+//     loginAttempts: number;
+//     updatedAt: Date; 
+//     status: UserStatus;
+//     resetToken : string| null;  // <-- Add this
+//   resetTokenExpiry: Date | null; // <-- Add this
+//   }
 const router = Router();
 
 /** ===========================
@@ -40,7 +40,7 @@ const router = Router();
 router.get('/groups', authenticateUser, authorizeRoles('SuperAdmin'), getGroups);
 router.post('/groups', authenticateUser, authorizeRoles('SuperAdmin'), createGroup);
 router.delete('/groups/:id', authenticateUser, authorizeRoles('SuperAdmin'), deleteGroup);
-
+router.put("/groups/:id", updateGroup);
 /** ===========================
  *        USER ROUTES
  * =========================== */

@@ -1,7 +1,5 @@
 import { Request, Response,NextFunction } from 'express';
-import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
-const prisma = new PrismaClient();
 import jwt, { SignOptions } from 'jsonwebtoken';
 import path from 'path';
 import fs from 'fs';
@@ -12,16 +10,11 @@ import {   JWT_SECRET,
   REFRESH_TOKEN_EXPIRES_IN,
   COOKIE_ACCESS_TOKEN_MAX_AGE,
   COOKIE_REFRESH_TOKEN_MAX_AGE } from "../lib/config";
-import { User as PrismaUser } from "@prisma/client";
 import { sendResetOtpEmail } from "../lib/sendemail";
 import { sendOtpEmail } from "../lib/sendotp"; // Make sure to create this helper
 import passport from "passport";
-declare global {
-    namespace Express {
-        interface User extends PrismaUser {}
-    }
-}
 
+import prisma from '../prismaClient'; // Import Prisma Client
 
 
 
@@ -256,20 +249,24 @@ export const deleteUser = async (req: Request, res: Response): Promise<void> => 
   };
 
 export const getGroups = async (req: Request, res: Response): Promise<void> => {
-    try {
-          
+  try {
+    const userId = req.userId;
+    console.log("userId:", userId);
 
-     
-       // Retrieve userId from session
-        const userId = req.userId;       console.log('userId:', userId);
-         const groups = await prisma.group.findMany();
-         console.info("Fetched all groups successfully");
-        res.status(200).json(groups);
-    } catch (err: any) {
-        console.error("api get groups: " + err.message);
-        handleError(res, err, "api get groups");
-    }
+    const groups = await prisma.group.findMany({
+      include: {
+        tablePermissions: true, // Include permissions
+      },
+    });
+
+    console.info("Fetched all groups with permissions successfully");
+    res.status(200).json(groups);
+  } catch (err: any) {
+    console.error("api get groups: " + err.message);
+    handleError(res, err, "api get groups");
+  }
 };
+
 
 // Controller: Create Group
 export const createGroup = async (req: Request, res: Response): Promise<void> => {
@@ -363,6 +360,51 @@ export const createGroupWithPermissions = async (req: Request, res: Response): P
     res.status(201).json({ message: "Group and permissions created", group: newGroup });
   } catch (err: any) {
     console.error("Error in createGroupWithPermissions:", err);
+    res.status(500).json({ error: "unexpected_error", message: err.message });
+  }
+};
+export const updateGroup = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const groupId = Number(req.params.id);
+    const { name, permissions } = req.body;
+
+    // 1. Validation
+    if (!name || typeof name !== "string") {
+      return void res.status(400).json({ error: "validation_error", message: "Group name is required." });
+    }
+
+    if (!Array.isArray(permissions)) {
+      return void res.status(400).json({ error: "validation_error", message: "Permissions must be an array." });
+    }
+
+    // 2. Update group name
+    const updatedGroup = await prisma.group.update({
+      where: { id: groupId },
+      data: { name },
+    });
+
+    // 3. Remove old permissions and add new ones
+    await prisma.tablePermission.deleteMany({ where: { groupId } });
+
+    await prisma.tablePermission.createMany({
+      data: permissions.map((perm: any) => ({
+        groupId,
+        tableName: perm.tableName,
+        canRead: !!perm.canRead,
+        canCreate: !!perm.canCreate,
+        canUpdate: !!perm.canUpdate,
+        canDelete: !!perm.canDelete,
+      })),
+    });
+
+    const fullGroup = await prisma.group.findUnique({
+      where: { id: groupId },
+      include: { tablePermissions: true },
+    });
+
+    res.status(200).json({ message: "Group updated", group: fullGroup });
+  } catch (err: any) {
+    console.error("Error in updateGroup:", err);
     res.status(500).json({ error: "unexpected_error", message: err.message });
   }
 };

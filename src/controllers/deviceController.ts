@@ -365,98 +365,7 @@ export const testDeviceConnection = async (req: Request, res: Response): Promise
 };
 
 
-export const fetchAndWriteToInflux = async (req: Request, res: Response): Promise<void> => {
-  const deviceId = req.params.id;
-  const { tables = [] }: { tables?: string[] } = req.body;
 
-  const device = await prisma.device.findUnique({
-    where: { id: deviceId },
-    include: { tables: true }
-  });
-
-  if (!device || !device.enabled) {
-    return void res.status(404).json({ error: "Device not found or disabled" });
-  }
-
-  const deviceType = device.type?.toLowerCase();
-  let data: { table: string; rows: any[] }[] = [];
-
-  // Validate tables only for database/odbc
-  if ((deviceType === "database" || deviceType === "odbc") && (!Array.isArray(tables) || tables.length === 0)) {
-    return void res.status(400).json({ error: "No table names provided" });
-  }
-
-  // Save missing tables
-  if (deviceType === "webapi") {
-    const alreadyExists = device.tables.some(t => t.tableName === device.name);
-    if (!alreadyExists) {
-      await prisma.deviceTable.create({
-        data: { deviceId, tableName: device.name }
-      });
-    }
-  } else if (deviceType === "database" || deviceType === "odbc") {
-    const existingTableNames = device.tables.map(t => t.tableName);
-    const newTables = tables.filter((name: string) => !existingTableNames.includes(name));
-    if (newTables.length > 0) {
-      await prisma.deviceTable.createMany({
-        data: newTables.map((tableName: string) => ({ deviceId, tableName }))
-      });
-    }
-  }
-
-  // Fetch data
-  try {
-    if (deviceType === "webapi") {
-      const property = device.property ? JSON.parse(device.property) : {};
-      const address = property.address;
-      if (!address) {
-        return void res.status(400).json({ error: "Missing WebAPI address in device property" });
-      }
-
-      const response = await fetch(address);
-      const json = await response.json();
-
-      data = Array.isArray(json)
-        ? [{ table: device.name, rows: json }]
-        : typeof json === "object"
-        ? [{ table: device.name, rows: [json] }]
-        : [];
-
-      if (data.length === 0) {
-        return void res.status(500).json({ error: "Unsupported WebAPI response format" });
-      }
-    } else if (deviceType === "odbc" || deviceType === "database") {
-      data = await deviceManager.fetchDataFromODBC(deviceId, tables);
-    } else {
-      return void res.status(400).json({ error: `Unsupported device type '${device.type}'` });
-    }
-  } catch (error: any) {
-    console.error("❌ Data fetch failed:", error);
-    return void res.status(500).json({ error: "Data fetch failed", message: error.message });
-  }
-
-  // Write to InfluxDB
-  try {
-    if (deviceType === "webapi") {
-      await deviceManager.writeWebApiDataToInflux(data, {
-        id: device.id,
-        enabled: device.enabled,
-        tables: [{ tableName: device.name }]
-      });
-    } else {
-      await deviceManager.writeDataToInflux(data, {
-        id: device.id,
-        enabled: device.enabled,
-        tables: tables.map((tableName: string) => ({ tableName }))
-      });
-    }
-
-    res.status(200).json({ message: "✅ Data written to Influx", data });
-  } catch (error: any) {
-    console.error("❌ Influx write failed:", error);
-    res.status(500).json({ error: "Failed to write to Influx", message: error.message });
-  }
-};
 
 
 
@@ -714,6 +623,9 @@ export const deleteAllDevices = async (req: Request, res: Response): Promise<voi
       res.status(500).json({ error: "unexpected_error", message: "An error occurred while deleting all devices." });
   }
 };
+
+
+
   export const getAllDevices = async (req: Request, res: Response): Promise<void> => {
     try {
       const devices = await prisma.device.findMany({
@@ -747,13 +659,9 @@ export const deleteAllDevices = async (req: Request, res: Response): Promise<voi
     }
   };
   
-// API to Connect to SQL Server via ODBC 
-
-
-
-// export const fetchAndWriteToInflux = async (req: Request, res: Response) : Promise<void> => {
+// export const fetchAndWriteToInflux = async (req: Request, res: Response): Promise<void> => {
 //   const deviceId = req.params.id;
-//   const { tables } = req.body;
+//   const { tables = [] }: { tables?: string[] } = req.body;
 
 //   const device = await prisma.device.findUnique({
 //     where: { id: deviceId },
@@ -761,312 +669,178 @@ export const deleteAllDevices = async (req: Request, res: Response): Promise<voi
 //   });
 
 //   if (!device || !device.enabled) {
-//      res.status(404).json({ error: 'Device not found or disabled' });
-//      return;
+//     return void res.status(404).json({ error: "Device not found or disabled" });
 //   }
 
-//   const data = await deviceManager.fetchDataFromODBC(deviceId, tables);
-//   await deviceManager.writeDataToInflux(data, device);
-
-//   res.status(200).json({ message: '✅ Data written to Influx', data });
-// };
-// export const fetchAndWriteToInflux = async (req: Request, res: Response): Promise<void> => {
-//   const deviceId = req.params.id;
-//   const { tables } = req.body;
-
-//   if (!Array.isArray(tables) || tables.length === 0) {
-//     res.status(400).json({ error: "No table names provided" });
-//     return;
-//   }
-
-//   const device = await prisma.device.findUnique({
-//     where: { id: deviceId },
-//     include: { tables: true }
-//   });
-
-//   if (!device || !device.enabled) {
-//     res.status(404).json({ error: 'Device not found or disabled' });
-//     return;
-//   }
-
-//   // Save any new tables that are not already in DeviceTable
-//   const existingTableNames = device.tables.map(t => t.tableName);
-//   const newTables = tables.filter((table: string) => !existingTableNames.includes(table));
-
-//   if (newTables.length > 0) {
-//     await prisma.deviceTable.createMany({
-//       data: newTables.map((table: string) => ({
-//         deviceId,
-//         tableName: table
-//       }))
-//     });
-//   }
-
-//   // Fetch data from the provided tables
-//   const data = await deviceManager.fetchDataFromODBC(deviceId, tables);
-
-//   // Write the data to InfluxDB
-//   await deviceManager.writeDataToInflux(data, {
-//     id: device.id,
-//     enabled: device.enabled,
-//     tables: tables.map((tableName: string) => ({ tableName }))
-//   });
-
-//   res.status(200).json({ message: '✅ Data written to Influx', data });
-// };
-
-
-// export const fetchAndWriteToInflux = async (req: Request, res: Response): Promise<void> => {
-//   const deviceId = req.params.id;
-//   const { tables } = req.body;
-
-//   if (!Array.isArray(tables) || tables.length === 0) {
-//     res.status(400).json({ error: "No table names provided" });
-//     return;
-//   }
-
-//   const device = await prisma.device.findUnique({
-//     where: { id: deviceId },
-//     include: { tables: true },
-//   });
-
-//   if (!device || !device.enabled) {
-//     res.status(404).json({ error: "Device not found or disabled" });
-//     return;
-//   }
-
-//   // Save any new tables to DeviceTable if not already saved
-//   const existingTableNames = device.tables.map(t => t.tableName);
-//   const newTables = tables.filter((t: string) => !existingTableNames.includes(t));
-
-//   if (newTables.length > 0) {
-//     await prisma.deviceTable.createMany({
-//       data: newTables.map((tableName: string) => ({
-//         deviceId,
-//         tableName,
-//       })),
-//     });
-//   }
-
+//   const deviceType = device.type?.toLowerCase();
 //   let data: { table: string; rows: any[] }[] = [];
 
-//   // Support "database", "odbc", and "webapi"
-//   if (device.type === "webapi") {
-//     data = await deviceManager.fetchDataFromWebAPI(deviceId);
-//   } else if (device.type === "database" || device.type === "odbc") {
-//     data = await deviceManager.fetchDataFromODBC(deviceId, tables);
-//   } else {
-//     res.status(400).json({ error: `Unsupported device type '${device.type}'` });
-//     return;
+//   // Validate tables only for database/odbc
+//   if ((deviceType === "database" || deviceType === "odbc") && (!Array.isArray(tables) || tables.length === 0)) {
+//     return void res.status(400).json({ error: "No table names provided" });
 //   }
 
-//   // Format for Influx writer
-//   const influxDevice = {
-//     id: device.id,
-//     enabled: device.enabled,
-//     tables: tables.map((tableName: string) => ({ tableName })),
-//   };
-
-//   await deviceManager.writeDataToInflux(data, influxDevice);
-
-//   res.status(200).json({ message: "✅ Data written to Influx", data });
-// };
-
-
-// export const connectODBCAndFetchData = async (req: Request, res: Response): Promise<void> => {
-//   try {
-//     const { dsn, query } = req.body;
-
-//     if (!dsn) {
-//       res.status(400).json({ error: "DSN is required to connect to SQL Server." });
-//       return;
+//   // Save missing tables
+//   if (deviceType === "webapi") {
+//     const alreadyExists = device.tables.some(t => t.tableName === device.name);
+//     if (!alreadyExists) {
+//       await prisma.deviceTable.create({
+//         data: { deviceId, tableName: device.name }
+//       });
 //     }
-
-//   const dsn = process.env.ODBC_DSN || 'YourDSNName';
-  
-//   const connectionString = `
-//       DSN=${dsn};
-//       TrustServerCertificate=yes;
-//     `;
-
-//     console.log(`Attempting to connect using DSN: ${dsn}`);
-
-//     const connection = await odbc.connect(connectionString.trim());
-//     console.log('✅ Connection Successful!');
-
-    
-//     await connection.close();
-//     console.log('✅ Connection Closed.');
-
-//     res.status(200).json({
-//       message: "Connection successful and data fetched.",
-      
-//     });
-
-//   } catch (error: any) {
-//     console.error('❌ Connection Error:', error.message);
-//     res.status(500).json({ error: "Connection failed. Check the DSN and query.", details: error.message });
+//   } else if (deviceType === "database" || deviceType === "odbc") {
+//     const existingTableNames = device.tables.map(t => t.tableName);
+//     const newTables = tables.filter((name: string) => !existingTableNames.includes(name));
+//     if (newTables.length > 0) {
+//       await prisma.deviceTable.createMany({
+//         data: newTables.map((tableName: string) => ({ deviceId, tableName }))
+//       });
+//     }
 //   }
-// };
 
-
-
-
-// export const testDeviceConnection = async (req: Request, res: Response): Promise<void> => {
-
-
+//   // Fetch data
 //   try {
-//     const { type, property } = req.body;
-
-//     if (!type || !property) {
-//       res.status(400).json({ error: "Both 'type' and 'property' are required." });
-//       return;
-//     }
-
-//     if (type === "WebAPI") {
-//       const { address, method = "GET" } = property;
-
+//     if (deviceType === "webapi") {
+//       const property = device.property ? JSON.parse(device.property) : {};
+//       const address = property.address;
 //       if (!address) {
-//         res.status(400).json({ error: "API address is required for WebAPI devices." });
-//         return;
+//         return void res.status(400).json({ error: "Missing WebAPI address in device property" });
 //       }
 
-//       try {
-//         const response = await axios({ url: address, method });
+//       const response = await fetch(address);
+//       const json = await response.json();
 
-//         if (response.status >= 200 && response.status < 300) {
-//           console.log("✅ WebAPI connection successful!");
-//           res.status(200).json({ message: "WebAPI connection successful." });
-//         } else {
-//           console.error("⚠ API responded with status:", response.status);
-//           res.status(500).json({ error: `WebAPI responded with status ${response.status}` });
-//         }
-//       } catch (err) {
-//         console.error("❌ WebAPI connection failed:", err);
-//         res.status(500).json({ error: "WebAPI connection failed.", details: (err as Error).message });
+//       data = Array.isArray(json)
+//         ? [{ table: device.name, rows: json }]
+//         : typeof json === "object"
+//         ? [{ table: device.name, rows: [json] }]
+//         : [];
+
+//       if (data.length === 0) {
+//         return void res.status(500).json({ error: "Unsupported WebAPI response format" });
 //       }
-//     } else if (type === "ODBC") {
-//       const { dsn } = property;
-
-//       if (!dsn) {
-//         res.status(400).json({ error: "DSN is required for ODBC connection." });
-//         return;
-//       }
-
-//       const connectionString = `DSN=${dsn};TrustServerCertificate=yes;`;
-
-//       try {
-//         const connection = await odbc.connect(connectionString.trim());
-//         console.log("✅ ODBC connection successful!");
-//         await connection.close();
-
-//         res.status(200).json({ message: "ODBC connection successful." });
-//       } catch (err: any) {
-//         console.error("❌ ODBC connection failed:", err.message);
-//         res.status(500).json({ error: "ODBC connection failed.", details: err.message });
-//       }
+//     } else if (deviceType === "odbc" || deviceType === "database") {
+//       data = await deviceManager.fetchDataFromODBC(deviceId, tables);
 //     } else {
-//       res.status(400).json({ error: `Unsupported device type '${type}'. Use 'WebAPI' or 'ODBC'.` });
+//       return void res.status(400).json({ error: `Unsupported device type '${device.type}'` });
 //     }
-//   } catch (err: any) {
-//     console.error("❌ testDeviceConnection error:", err);
-//     res.status(500).json({ error: "Internal server error.", details: err.message });
+//   } catch (error: any) {
+//     console.error("❌ Data fetch failed:", error);
+//     return void res.status(500).json({ error: "Data fetch failed", message: error.message });
 //   }
-// };
 
-
-
-// export const testDeviceConnection = async (req: Request, res: Response): Promise<void> => {
+//   // Write to InfluxDB
 //   try {
-//     const { type, property } = req.body;
-
-//     if (!type || !property) {
-//       return void res.status(400).json({ error: "Both 'type' and 'property' are required." });
+//     if (deviceType === "webapi") {
+//       await deviceManager.writeWebApiDataToInflux(data, {
+//         id: device.id,
+//         enabled: device.enabled,
+//         tables: [{ tableName: device.name }]
+//       });
+//     } else {
+//       await deviceManager.writeDataToInflux(data, {
+//         id: device.id,
+//         enabled: device.enabled,
+//         tables: tables.map((tableName: string) => ({ tableName }))
+//       });
 //     }
 
-//     if (type === "WebAPI") {
-//       const { address, method = "GET" } = property;
-//       if (!address) {
-//         return void res.status(400).json({ error: "API address is required for WebAPI devices." });
-//       }
-
-//       try {
-//         const response = await axios({ url: address, method });
-//         if (response.status >= 200 && response.status < 300) {
-//           console.log("✅ WebAPI connection successful!");
-//           return void res.status(200).json({ message: "WebAPI connection successful." });
-//         } else {
-//           return void res.status(500).json({ error: `WebAPI responded with status ${response.status}` });
-//         }
-//       } catch (err) {
-//         return void res.status(500).json({ error: "WebAPI connection failed.", details: (err as Error).message });
-//       }
-//     }
-
-//     if (type === "ODBC") {
-//       const { dsn } = property;
-//       if (!dsn) {
-//         return void res.status(400).json({ error: "DSN is required for ODBC connection." });
-//       }
-
-//       try {
-//         const connection = await odbc.connect(`DSN=${dsn};TrustServerCertificate=yes;`);
-//         console.log("✅ ODBC connection successful!");
-//         await connection.close();
-//         return void res.status(200).json({ message: "ODBC connection successful." });
-//       } catch (err: any) {
-//         return void res.status(500).json({ error: "ODBC connection failed.", details: err.message });
-//       }
-//     }
-
-//     if (type === "postgres") {
-//       const { host, port, user, password, databaseName } = property;
-//       if (!host || !port || !user || !password || !databaseName) {
-//         return void res.status(400).json({ error: "Missing PostgreSQL connection fields." });
-//       }
-
-//       try {
-//         const client = new PgClient({ host, port: Number(port), user, password, database: databaseName });
-//         await client.connect();
-//         const result = await client.query(`SELECT table_name FROM information_schema.tables WHERE table_schema = 'public'`);
-//         const tables = result.rows.map(row => row.table_name);
-//         await client.end();
-//         return void res.status(200).json({ message: "PostgreSQL connected.", tables });
-//       } catch (err: any) {
-//         return void res.status(500).json({ error: "PostgreSQL connection failed.", details: err.message });
-//       }
-//     }
-
-//     if (type === "mssql") {
-//       const { host, port, user, password, databaseName } = property;
-//       if (!host || !port || !user || !password || !databaseName) {
-//         return void res.status(400).json({ error: "Missing MSSQL connection fields." });
-//       }
-
-//       try {
-//         await sql.connect({
-//           user,
-//           password,
-//           server: host,
-//           database: databaseName,
-//           port: Number(port),
-//           options: {
-//             encrypt: false,
-//             trustServerCertificate: true,
-//           },
-//         });
-
-//         const result = await sql.query(`SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_TYPE = 'BASE TABLE'`);
-//         const tables = result.recordset.map((row: any) => row.TABLE_NAME);
-//         return void res.status(200).json({ message: "MSSQL connected.", tables });
-//       } catch (err: any) {
-//         return void res.status(500).json({ error: "MSSQL connection failed.", details: err.message });
-//       }
-//     }
-
-//     return void res.status(400).json({ error: `Unsupported device type '${type}'. Use 'WebAPI', 'ODBC', 'postgres', or 'mssql'.` });
-//   } catch (err: any) {
-//     console.error("❌ testDeviceConnection error:", err);
-//     res.status(500).json({ error: "Internal server error.", details: err.message });
+//     res.status(200).json({ message: "✅ Data written to Influx", data });
+//   } catch (error: any) {
+//     console.error("❌ Influx write failed:", error);
+//     res.status(500).json({ error: "Failed to write to Influx", message: error.message });
 //   }
 // };
+
+
+export const fetchAndWriteToInflux = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const deviceId = req.params.id;
+    const { tables = [] }: { tables?: string[] } = req.body;
+
+    const device = await prisma.device.findUnique({
+      where: { id: deviceId },
+      include: { tables: true },
+    });
+
+    if (!device || !device.enabled) {
+      return void res.status(404).json({ error: "Device not found or disabled" });
+    }
+
+    const deviceType = device.type?.toLowerCase();
+    if (!deviceType) {
+      return void res.status(400).json({ error: "Device type is missing or invalid" });
+    }
+
+    // Validate tables input for database/ODBC
+    if ((deviceType === "database" || deviceType === "odbc") && (!Array.isArray(tables) || tables.length === 0)) {
+      return void res.status(400).json({ error: "No table names provided" });
+    }
+
+    // Store new table names if missing
+    if (deviceType === "webapi") {
+      const alreadyExists = device.tables.some((t: { tableName: string }) => t.tableName === device.name);
+      if (!alreadyExists) {
+        await prisma.deviceTable.create({
+          data: { deviceId, tableName: device.name },
+        });
+      }
+    } else if (deviceType === "database" || deviceType === "odbc") {
+      const existingTableNames = device.tables.map((t: { tableName: string }) => t.tableName);
+      const newTables = tables.filter((name: string) => !existingTableNames.includes(name));
+      if (newTables.length > 0) {
+        await prisma.deviceTable.createMany({
+          data: newTables.map((tableName: string) => ({ deviceId, tableName })),
+        });
+      }
+    }
+
+    // Fetch the data
+    let data: { table: string; rows: any[] }[] = [];
+
+    if (deviceType === "webapi") {
+      const property = device.property ? JSON.parse(device.property) : {};
+      const address = property.address;
+      if (!address) {
+        return void res.status(400).json({ error: "Missing WebAPI address in device property" });
+      }
+
+      const response = await fetch(address);
+      const json = await response.json();
+
+      data = Array.isArray(json)
+        ? [{ table: device.name, rows: json }]
+        : typeof json === "object"
+        ? [{ table: device.name, rows: [json] }]
+        : [];
+
+      if (data.length === 0) {
+        return void res.status(500).json({ error: "Unsupported WebAPI response format" });
+      }
+    } else if (deviceType === "odbc" || deviceType === "database") {
+      data = await deviceManager.fetchDataFromODBC(deviceId, tables);
+    } else {
+      return void res.status(400).json({ error: `Unsupported device type '${device.type}'` });
+    }
+
+    // Write to InfluxDB
+    if (deviceType === "webapi") {
+      await deviceManager.writeWebApiDataToInflux(data, {
+        id: device.id,
+        enabled: device.enabled,
+        tables: [{ tableName: device.name }],
+      });
+    } else {
+      await deviceManager.writeDataToInflux(data, {
+        id: device.id,
+        enabled: device.enabled,
+        tables: tables.map((tableName: string) => ({ tableName })),
+      });
+    }
+
+    res.status(200).json({ message: "✅ Data written to Influx", data });
+  } catch (error: any) {
+    console.error("❌ Error in fetchAndWriteToInflux:", error);
+    res.status(500).json({ error: "Unexpected error", message: error.message });
+  }
+};

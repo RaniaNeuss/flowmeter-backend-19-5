@@ -255,46 +255,6 @@ const writeDataToInflux = async (
 };
 
 
-
-
-//  const writeWebApiDataToInflux = async (
-//   data: { table: string; rows: any[] }[],
-//   device: { id: string; enabled: boolean; tables: { tableName: string }[] }
-// ) => {
-//   if (!device || !device.enabled) {
-//     console.warn(`⚠️ Skipping InfluxDB write. Device is deleted or disabled.`);
-//     return;
-//   }
-
-//   try {
-//     for (const { table, rows } of data) {
-//       for (const row of rows) {
-//         const flattened = dataToFlat(row); // flatten object for WebAPI rows
-
-//         const point = new Point(table); // measurement = device.name (used as "table" above)
-
-//         for (const [key, value] of Object.entries(flattened)) {
-//         if (typeof value === 'number') {
-//   point.floatField(key, value);
-// } else if (typeof value === 'boolean') {
-//   point.booleanField(key, value);
-// } else if (typeof value === 'string') {
-//   // Avoid writing numbers as strings if previously written as numeric
-//   point.stringField(key, value); // changed from tag()
-// }
-//         }
-
-//         point.timestamp(Date.now() * 1_000_000); // nanoseconds
-//         writeApi.writePoint(point);
-//       }
-//     }
-
-//     await writeApi.flush();
-//     console.log("✅ Data successfully written to InfluxDB.");
-//   } catch (error) {
-//     console.error("❌ Error writing data to InfluxDB:", error);
-//   }
-// };
 function flattenObject(obj: any, prefix = ''): Record<string, any> {
   return Object.entries(obj).reduce((acc, [k, v]) => {
     const key = prefix ? `${prefix}.${k}` : k;
@@ -415,40 +375,6 @@ const fetchDataFromWebAPI = async (deviceId: string): Promise<{ table: string; r
 };
 
 
-
-
-
-// const writeDataToInflux = async (data: any[], device: any) => {
-//   if (!device || device.enabled === false) {
-//     console.warn(`⚠️ Skipping InfluxDB write. Device is deleted or disabled.`);
-//     return;
-//   }
-
-//   try {
-//     for (const record of data) {
-//       try {
-//         const rawDataArray = JSON.parse(record.rawData);
-//         for (const entry of rawDataArray) {
-//           const timestamp = entry.time ? new Date(entry.time).getTime() * 1000000 : Date.now() * 1000000;
-//           if (isNaN(timestamp)) continue;
-//           const point = new Point("accumulated_flow")
-//             .tag("station", entry.station)
-//             .tag("bay", entry.bay)
-//             .floatField("flow", entry.flow)
-//             .timestamp(timestamp);
-//           writeApi.writePoint(point);
-//         }
-//       } catch (err) {
-//         console.error("Error parsing rawData JSON:", err);
-//       }
-//     }
-//     await writeApi.flush();
-//     console.log("✅ Data successfully written to InfluxDB.");
-//   } catch (err) {
-//     // Suppressed on purpose
-//   }
-// };
-
 const startODBCPolling = (deviceId: string, pollingInterval: number) => {
   console.log(`🚀 Starting ODBC polling for Device ID: ${deviceId} every ${pollingInterval / 60000} minutes.`);
 
@@ -513,9 +439,6 @@ const startPolling = (deviceId: string, device: any, httpClient: any) => {
 
 
 
-
-
-
 const stopPolling = (deviceId: string) => {
   if (pollingIntervals[deviceId]) {
     clearInterval(pollingIntervals[deviceId]);
@@ -557,124 +480,3 @@ export default {
   handleDeviceUpdated,
   handleDeviceDeleted,
 };
-
-// export const fetchAndWriteToInflux = async (req: Request, res: Response) : Promise<void> => {
-//   const deviceId = req.params.id;
-//   const { tables } = req.body;
-
-//   const device = await prisma.device.findUnique({
-//     where: { id: deviceId },
-//     include: { tables: true }
-//   });
-
-//   if (!device || !device.enabled) {
-//      res.status(404).json({ error: 'Device not found or disabled' });
-//      return;
-//   }
-
-//   const data = await deviceManager.fetchDataFromODBC(deviceId, tables);
-//   await deviceManager.writeDataToInflux(data, device);
-
-//   res.status(200).json({ message: '✅ Data written to Influx', data });
-// };
-// export const fetchAndWriteToInflux = async (req: Request, res: Response): Promise<void> => {
-//   const deviceId = req.params.id;
-//   const { tables } = req.body;
-
-//   if (!Array.isArray(tables) || tables.length === 0) {
-//     res.status(400).json({ error: "No table names provided" });
-//     return;
-//   }
-
-//   const device = await prisma.device.findUnique({
-//     where: { id: deviceId },
-//     include: { tables: true }
-//   });
-
-//   if (!device || !device.enabled) {
-//     res.status(404).json({ error: 'Device not found or disabled' });
-//     return;
-//   }
-
-//   // Save any new tables that are not already in DeviceTable
-//   const existingTableNames = device.tables.map(t => t.tableName);
-//   const newTables = tables.filter((table: string) => !existingTableNames.includes(table));
-
-//   if (newTables.length > 0) {
-//     await prisma.deviceTable.createMany({
-//       data: newTables.map((table: string) => ({
-//         deviceId,
-//         tableName: table
-//       }))
-//     });
-//   }
-
-//   // Fetch data from the provided tables
-//   const data = await deviceManager.fetchDataFromODBC(deviceId, tables);
-
-//   // Write the data to InfluxDB
-//   await deviceManager.writeDataToInflux(data, {
-//     id: device.id,
-//     enabled: device.enabled,
-//     tables: tables.map((tableName: string) => ({ tableName }))
-//   });
-
-//   res.status(200).json({ message: '✅ Data written to Influx', data });
-// };
-
-
-// export const fetchAndWriteToInflux = async (req: Request, res: Response): Promise<void> => {
-//   const deviceId = req.params.id;
-//   const { tables } = req.body;
-
-//   if (!Array.isArray(tables) || tables.length === 0) {
-//     res.status(400).json({ error: "No table names provided" });
-//     return;
-//   }
-
-//   const device = await prisma.device.findUnique({
-//     where: { id: deviceId },
-//     include: { tables: true },
-//   });
-
-//   if (!device || !device.enabled) {
-//     res.status(404).json({ error: "Device not found or disabled" });
-//     return;
-//   }
-
-//   // Save any new tables to DeviceTable if not already saved
-//   const existingTableNames = device.tables.map(t => t.tableName);
-//   const newTables = tables.filter((t: string) => !existingTableNames.includes(t));
-
-//   if (newTables.length > 0) {
-//     await prisma.deviceTable.createMany({
-//       data: newTables.map((tableName: string) => ({
-//         deviceId,
-//         tableName,
-//       })),
-//     });
-//   }
-
-//   let data: { table: string; rows: any[] }[] = [];
-
-//   // Support "database", "odbc", and "webapi"
-//   if (device.type === "webapi") {
-//     data = await deviceManager.fetchDataFromWebAPI(deviceId);
-//   } else if (device.type === "database" || device.type === "odbc") {
-//     data = await deviceManager.fetchDataFromODBC(deviceId, tables);
-//   } else {
-//     res.status(400).json({ error: `Unsupported device type '${device.type}'` });
-//     return;
-//   }
-
-//   // Format for Influx writer
-//   const influxDevice = {
-//     id: device.id,
-//     enabled: device.enabled,
-//     tables: tables.map((tableName: string) => ({ tableName })),
-//   };
-
-//   await deviceManager.writeDataToInflux(data, influxDevice);
-
-//   res.status(200).json({ message: "✅ Data written to Influx", data });
-// };
