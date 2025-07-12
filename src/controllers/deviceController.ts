@@ -7,9 +7,107 @@ import axios from 'axios';
 import mysql from 'mysql2/promise';
 import { Client as PgClient } from 'pg';
 import sql from 'mssql';
-/**
- * Create a new device
- */
+export const createDevice = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { name, type, description, property, enabled = true, polling, tables = [] } = req.body;
+
+    if (!name) {
+      return void res.status(400).json({ error: "Device name is required" });
+    }
+
+    const existingDevice = await prisma.device.findUnique({ where: { name } });
+    if (existingDevice) {
+      return void res.status(400).json({ error: "Device with the same name already exists" });
+    }
+
+    const newDevice = await prisma.device.create({
+      data: {
+        name,
+        type,
+        description,
+        property: JSON.stringify(property),
+        enabled,
+        polling,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+    });
+
+    console.log(`Device '${newDevice.name}' created.`);
+
+    if (!enabled) {
+      return void res.status(201).json(newDevice);
+    }
+
+    const deviceType = type?.toLowerCase();
+    if (!deviceType) {
+      return void res.status(400).json({ error: "Device type is missing or invalid" });
+    }
+
+    const deviceId = newDevice.id;
+
+    // Save table metadata
+    if (deviceType === "webapi") {
+      const exists = await prisma.deviceTable.findFirst({ where: { deviceId, tableName: name } });
+      if (!exists) {
+        await prisma.deviceTable.create({ data: { deviceId, tableName: name } });
+      }
+    } else if (deviceType === "database" || deviceType === "odbc") {
+      const existingTables = await prisma.deviceTable.findMany({ where: { deviceId } });
+      const existingNames = existingTables.map(t => t.tableName);
+      const newTableNames = tables.filter((t: string) => !existingNames.includes(t));
+
+      if (newTableNames.length > 0) {
+        await prisma.deviceTable.createMany({
+          data: newTableNames.map((tableName: string) => ({ deviceId, tableName })),
+        });
+      }
+    }
+
+    // Fetch & Write to Influx
+    let data: { table: string; rows: any[] }[] = [];
+
+    if (deviceType === "webapi") {
+      const parsed = JSON.parse(newDevice.property || "{}");
+      if (!parsed.address) {
+        return void res.status(400).json({ error: "Missing WebAPI address in device property" });
+      }
+
+      const response = await fetch(parsed.address);
+      const json = await response.json();
+
+      data = Array.isArray(json)
+        ? [{ table: name, rows: json }]
+        : typeof json === "object"
+        ? [{ table: name, rows: [json] }]
+        : [];
+
+      if (data.length === 0) {
+        return void res.status(500).json({ error: "Unsupported WebAPI response format" });
+      }
+
+      await deviceManager.writeWebApiDataToInflux(data, {
+        id: deviceId,
+        enabled,
+        tables: [{ tableName: name }],
+      });
+
+    } else if (deviceType === "database" || deviceType === "odbc") {
+      data = await deviceManager.fetchDataFromODBC(deviceId, tables);
+      await deviceManager.writeDataToInflux(data, {
+        id: deviceId,
+        enabled,
+        tables: tables.map((tableName: string) => ({ tableName })),
+      });
+    }
+
+    res.status(201).json({ message: "✅ Device created and data written to Influx", device: newDevice, data });
+  } catch (error: any) {
+    console.error("❌ Error creating device:", error);
+    res.status(500).json({ error: "Failed to create device", message: error.message });
+  }
+};
+
 // export const createDevice = async (req: Request, res: Response): Promise<void> => {
 //   try {
 //     const {  name, type, description, property, enabled = true, polling } = req.body;
@@ -20,9 +118,11 @@ import sql from 'mssql';
 //     }
 
 //     // Check for duplicate device
-//     const existingDevice = await prisma.device.findUnique({ where: { name } });
+//   const existingDevice = await prisma.device.findUnique({ where: { name } });
 //     if (existingDevice) {
+//       console.error("Device with the same name already exists.");
 //       res.status(400).json({ error: "Device with the same name already exists" });
+//       return;
 //     }
 
 //     // Save device to the database
@@ -54,52 +154,6 @@ import sql from 'mssql';
 //     res.status(500).json({ error: "Failed to create device" });
 //   }
 // };
-export const createDevice = async (req: Request, res: Response): Promise<void> => {
-  try {
-    const {  name, type, description, property, enabled = true, polling } = req.body;
-
-    // Validate common fields
-    if (!name ) {
-      res.status(400).json({ error: "Device name is required" });
-    }
-
-    // Check for duplicate device
-  const existingDevice = await prisma.device.findUnique({ where: { name } });
-    if (existingDevice) {
-      console.error("Device with the same name already exists.");
-      res.status(400).json({ error: "Device with the same name already exists" });
-      return;
-    }
-
-    // Save device to the database
-    const newDevice = await prisma.device.create({
-      data: {
-       
-        name,
-        type,
-        description,
-        property: JSON.stringify(property),
-        enabled,
-        polling,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      },
-    });
-
-    console.log(`Device '${newDevice.name}' created.`);
-
-    // Notify the device manager to initialize the device
-    if (enabled) {
-      deviceManager.initializeAndPollDevices([newDevice]);
-    }
-
-    res.status(201).json(newDevice);
-
-  } catch (error) {
-    console.error("Error creating device:", error);
-    res.status(500).json({ error: "Failed to create device" });
-  }
-};
 
 export const getDeviceTables = async (req: Request, res: Response): Promise<void> => {
   try {
@@ -272,97 +326,97 @@ export const getDeviceTableFeilds = async (req: Request, res: Response): Promise
   }
 };
 
-export const testDeviceConnection = async (req: Request, res: Response): Promise<void> => {
-  try {
-    const { type, property } = req.body;
+// export const testDeviceConnection = async (req: Request, res: Response): Promise<void> => {
+//   try {
+//     const { type, property } = req.body;
 
-    if (!type || !property) {
-      return void res.status(400).json({ error: "Both 'type' and 'property' are required." });
-    }
+//     if (!type || !property) {
+//       return void res.status(400).json({ error: "Both 'type' and 'property' are required." });
+//     }
 
-    if (type === "WebAPI") {
-      const { address, method = "GET" } = property;
-      if (!address) {
-        return void res.status(400).json({ error: "API address is required for WebAPI devices." });
-      }
+//     if (type === "WebAPI") {
+//       const { address, method = "GET" } = property;
+//       if (!address) {
+//         return void res.status(400).json({ error: "API address is required for WebAPI devices." });
+//       }
 
-      try {
-        const response = await axios({ url: address, method });
-        if (response.status >= 200 && response.status < 300) {
-          return void res.status(200).json({ message: "WebAPI connection successful." });
-        } else {
-          return void res.status(500).json({ error: `WebAPI responded with status ${response.status}` });
-        }
-      } catch (err) {
-        return void res.status(500).json({ error: "WebAPI connection failed.", details: (err as Error).message });
-      }
-    }
+//       try {
+//         const response = await axios({ url: address, method });
+//         if (response.status >= 200 && response.status < 300) {
+//           return void res.status(200).json({ message: "WebAPI connection successful." });
+//         } else {
+//           return void res.status(500).json({ error: `WebAPI responded with status ${response.status}` });
+//         }
+//       } catch (err) {
+//         return void res.status(500).json({ error: "WebAPI connection failed.", details: (err as Error).message });
+//       }
+//     }
 
-    if (type === "ODBC") {
-      const { dsn } = property;
-      if (!dsn) {
-        return void res.status(400).json({ error: "DSN is required for ODBC connection." });
-      }
+//     if (type === "ODBC") {
+//       const { dsn } = property;
+//       if (!dsn) {
+//         return void res.status(400).json({ error: "DSN is required for ODBC connection." });
+//       }
 
-      try {
-        const connection = await odbc.connect(`DSN=${dsn};TrustServerCertificate=yes;`);
-        await connection.close();
-        return void res.status(200).json({ message: "ODBC connection successful." });
-      } catch (err: any) {
-        return void res.status(500).json({ error: "ODBC connection failed.", details: err.message });
-      }
-    }
+//       try {
+//         const connection = await odbc.connect(`DSN=${dsn};TrustServerCertificate=yes;`);
+//         await connection.close();
+//         return void res.status(200).json({ message: "ODBC connection successful." });
+//       } catch (err: any) {
+//         return void res.status(500).json({ error: "ODBC connection failed.", details: err.message });
+//       }
+//     }
 
-    if (type === "database") {
-      const { dbType, host, port, user, password, databaseName } = property;
-      if (!dbType || !host || !port || !user || !password || !databaseName) {
-        return void res.status(400).json({ error: "Missing database connection fields." });
-      }
+//     if (type === "database") {
+//       const { dbType, host, port, user, password, databaseName } = property;
+//       if (!dbType || !host || !port || !user || !password || !databaseName) {
+//         return void res.status(400).json({ error: "Missing database connection fields." });
+//       }
 
-      if (dbType === "postgres") {
-        try {
-          const client = new PgClient({ host, port: Number(port), user, password, database: databaseName });
-          await client.connect();
-          const result = await client.query(`SELECT table_name FROM information_schema.tables WHERE table_schema = 'public'`);
-          const tables = result.rows.map(row => row.table_name);
-          await client.end();
-          return void res.status(200).json({ message: "PostgreSQL connected.", tables });
-        } catch (err: any) {
-          return void res.status(500).json({ error: "PostgreSQL connection failed.", details: err.message });
-        }
-      }
+//       if (dbType === "postgres") {
+//         try {
+//           const client = new PgClient({ host, port: Number(port), user, password, database: databaseName });
+//           await client.connect();
+//           const result = await client.query(`SELECT table_name FROM information_schema.tables WHERE table_schema = 'public'`);
+//           const tables = result.rows.map(row => row.table_name);
+//           await client.end();
+//           return void res.status(200).json({ message: "PostgreSQL connected.", tables });
+//         } catch (err: any) {
+//           return void res.status(500).json({ error: "PostgreSQL connection failed.", details: err.message });
+//         }
+//       }
 
-      if (dbType === "mssql") {
-        try {
-          await sql.connect({
-            user,
-            password,
-            server: host,
-            database: databaseName,
-            port: Number(port),
-            options: {
-              encrypt: false,
-              trustServerCertificate: true,
-            },
-          });
+//       if (dbType === "mssql") {
+//         try {
+//           await sql.connect({
+//             user,
+//             password,
+//             server: host,
+//             database: databaseName,
+//             port: Number(port),
+//             options: {
+//               encrypt: false,
+//               trustServerCertificate: true,
+//             },
+//           });
 
-          const result = await sql.query(`SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_TYPE = 'BASE TABLE'`);
-          const tables = result.recordset.map((row: any) => row.TABLE_NAME);
-          return void res.status(200).json({ message: "MSSQL connected.", tables });
-        } catch (err: any) {
-          return void res.status(500).json({ error: "MSSQL connection failed.", details: err.message });
-        }
-      }
+//           const result = await sql.query(`SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_TYPE = 'BASE TABLE'`);
+//           const tables = result.recordset.map((row: any) => row.TABLE_NAME);
+//           return void res.status(200).json({ message: "MSSQL connected.", tables });
+//         } catch (err: any) {
+//           return void res.status(500).json({ error: "MSSQL connection failed.", details: err.message });
+//         }
+//       }
 
-      return void res.status(400).json({ error: `Unsupported dbType '${dbType}'. Use 'postgres' or 'mssql'.` });
-    }
+//       return void res.status(400).json({ error: `Unsupported dbType '${dbType}'. Use 'postgres' or 'mssql'.` });
+//     }
 
-    return void res.status(400).json({ error: `Unsupported type '${type}'. Use 'WebAPI', 'ODBC', or 'database'.` });
-  } catch (err: any) {
-    console.error("❌ testDeviceConnection error:", err);
-    res.status(500).json({ error: "Internal server error.", details: err.message });
-  }
-};
+//     return void res.status(400).json({ error: `Unsupported type '${type}'. Use 'WebAPI', 'ODBC', or 'database'.` });
+//   } catch (err: any) {
+//     console.error("❌ testDeviceConnection error:", err);
+//     res.status(500).json({ error: "Internal server error.", details: err.message });
+//   }
+// };
 
 
 
@@ -451,6 +505,99 @@ export const testDeviceConnection = async (req: Request, res: Response): Promise
 //   }
 // };
 
+export const testDeviceConnection = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { type, property } = req.body;
+
+    if (!type || !property) {
+      return void res.status(400).json({ error: "Both 'type' and 'property' are required." });
+    }
+
+    if (type === "WebAPI") {
+      const { address, method = "GET" } = property;
+      if (!address) {
+        return void res.status(400).json({ error: "API address is required for WebAPI devices." });
+      }
+
+      try {
+        const response = await axios({ url: address, method });
+        if (response.status >= 200 && response.status < 300) {
+          return void res.status(200).json({ message: "WebAPI connection successful." });
+        } else {
+          return void res.status(500).json({ error: `WebAPI responded with status ${response.status}` });
+        }
+      } catch (err) {
+        return void res.status(500).json({ error: "WebAPI connection failed.", details: (err as Error).message });
+      }
+    }
+
+    if (type === "ODBC") {
+      const { dsn } = property;
+      if (!dsn) {
+        return void res.status(400).json({ error: "DSN is required for ODBC connection." });
+      }
+
+      try {
+        const connection = await odbc.connect(`DSN=${dsn};TrustServerCertificate=yes;`);
+        const result = await connection.query(`SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_TYPE='BASE TABLE'`);
+        const tables = result.map((row: any) => row.TABLE_NAME);
+        await connection.close();
+        return void res.status(200).json({ message: "ODBC connection successful.", tables });
+      } catch (err: any) {
+        return void res.status(500).json({ error: "ODBC connection failed.", details: err.message });
+      }
+    }
+
+    if (type === "database") {
+      const { dbType, host, port, user, password, databaseName } = property;
+      if (!dbType || !host || !port || !user || !password || !databaseName) {
+        return void res.status(400).json({ error: "Missing database connection fields." });
+      }
+
+      if (dbType === "postgres") {
+        try {
+          const client = new PgClient({ host, port: Number(port), user, password, database: databaseName });
+          await client.connect();
+          const result = await client.query(`SELECT table_name FROM information_schema.tables WHERE table_schema = 'public'`);
+          const tables = result.rows.map(row => row.table_name);
+          await client.end();
+          return void res.status(200).json({ message: "PostgreSQL connected.", tables });
+        } catch (err: any) {
+          return void res.status(500).json({ error: "PostgreSQL connection failed.", details: err.message });
+        }
+      }
+
+      if (dbType === "mssql") {
+        try {
+          await sql.connect({
+            user,
+            password,
+            server: host,
+            database: databaseName,
+            port: Number(port),
+            options: {
+              encrypt: false,
+              trustServerCertificate: true,
+            },
+          });
+
+          const result = await sql.query(`SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_TYPE = 'BASE TABLE'`);
+          const tables = result.recordset.map((row: any) => row.TABLE_NAME);
+          return void res.status(200).json({ message: "MSSQL connected.", tables });
+        } catch (err: any) {
+          return void res.status(500).json({ error: "MSSQL connection failed.", details: err.message });
+        }
+      }
+
+      return void res.status(400).json({ error: `Unsupported dbType '${dbType}'. Use 'postgres' or 'mssql'.` });
+    }
+
+    return void res.status(400).json({ error: `Unsupported type '${type}'. Use 'WebAPI', 'ODBC', or 'database'.` });
+  } catch (err: any) {
+    console.error("❌ testDeviceConnection error:", err);
+    res.status(500).json({ error: "Internal server error.", details: err.message });
+  }
+};
 
 /**
  * Edit a device
